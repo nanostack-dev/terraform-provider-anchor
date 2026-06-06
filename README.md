@@ -69,7 +69,37 @@ With a dev override active, skip `terraform init` and run `terraform plan` direc
 
 ## Releasing
 
-Releases are cut by pushing a semver tag:
+### One-time setup
+
+1. **Generate a GPG signing key** (no expiry, RSA 4096):
+   ```bash
+   gpg --batch --full-generate-key <<EOF
+   Key-Type: RSA
+   Key-Length: 4096
+   Name-Real: Nanostack Terraform Provider
+   Name-Email: ops@nanostack.dev
+   Expire-Date: 0
+   %no-protection
+   %commit
+   EOF
+   ```
+   Get the fingerprint: `gpg --list-secret-keys --keyid-format=long`.
+
+2. **Add repo secrets** (Settings → Secrets and variables → Actions):
+   - `GPG_PRIVATE_KEY` — `gpg --armor --export-secret-keys <FINGERPRINT>`
+   - `PASSPHRASE` — the key passphrase (empty if `%no-protection` was used)
+   ```bash
+   gh secret set GPG_PRIVATE_KEY < <(gpg --armor --export-secret-keys <FINGERPRINT>)
+   gh secret set PASSPHRASE --body ""
+   ```
+
+3. **Connect the provider on the Terraform Registry**:
+   - Sign in at https://registry.terraform.io with the GitHub org account.
+   - https://registry.terraform.io/publish/provider → select `nanostack-dev/terraform-provider-anchor`.
+   - Under the namespace's **GPG keys**, add the **public** key:
+     `gpg --armor --export <FINGERPRINT>`.
+
+### Cut a release
 
 ```bash
 git tag v0.1.0
@@ -77,11 +107,9 @@ git push origin v0.1.0
 ```
 
 The `Release` workflow runs GoReleaser, GPG-signs the checksums, and publishes the
-archives + `SHA256SUMS` + `SHA256SUMS.sig` + manifest as a GitHub release. The
-Terraform Registry ingests the tag automatically once the provider is connected
-and the GPG public key is registered.
-
-Requires repo secrets `GPG_PRIVATE_KEY` and `PASSPHRASE`.
+zip archives + `SHA256SUMS` + `SHA256SUMS.sig` + `manifest.json` as a GitHub
+release. The Terraform Registry ingests the tag automatically (once connected and
+the GPG public key is registered), making `terraform init` work for consumers.
 
 ## License
 
