@@ -1,0 +1,19 @@
+# Compiled provider binary
+terraform-provider-anchor
+terraform-provider-anchor_v*
+
+# GoReleaser output
+dist/
+
+# Terraform working dirs / state (local testing only)
+**/.terraform/*
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# OS / editor
+.DS_Store
+.idea/
+*.iml
