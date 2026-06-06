@@ -113,4 +113,4 @@ the GPG public key is registered), making `terraform init` work for consumers.
 
 ## License
 
-[FSL-1.1-ALv2](./LICENSE) (Functional Source License; converts to Apache-2.0).
+[Apache License 2.0](./LICENSE).
