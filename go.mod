@@ -1,6 +1,6 @@
 module github.com/nanostack-dev/terraform-provider-anchor
 
-go 1.26.1
+go 1.26.2
 
 require (
 	github.com/hashicorp/terraform-plugin-framework v1.16.1
