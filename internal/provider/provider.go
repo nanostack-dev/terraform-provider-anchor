@@ -47,7 +47,8 @@ func (p *anchorProvider) Metadata(_ context.Context, _ provider.MetadataRequest,
 
 func (p *anchorProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Anchor provider for managing products, product roles, and product resource permissions.",
+		Description: "Anchor provider for managing products, product roles, product resource permissions, " +
+			"license schemas, and license templates.",
 		Attributes: map[string]schema.Attribute{
 			"base_url": schema.StringAttribute{
 				Optional:    true,
@@ -153,9 +154,17 @@ func (p *anchorProvider) Resources(_ context.Context) []func() resource.Resource
 		NewProductResource,
 		NewProductRoleResource,
 		NewProductPermissionResource,
+		NewLicenseSchemaResource,
+		NewLicenseTemplateResource,
 	}
 }
 
+// DataSources returns no data sources.
+//
+// The provider offers nothing that manages an organization's license, neither a resource
+// nor a data source. An organization's license is runtime data: it carries per-customer
+// adjustments that Terraform would revert on the next apply. See ADR-0006 in the anchor
+// repository.
 func (p *anchorProvider) DataSources(_ context.Context) []func() datasource.DataSource {
 	return nil
 }

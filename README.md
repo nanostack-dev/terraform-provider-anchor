@@ -1,7 +1,8 @@
 # Terraform Provider: Anchor
 
 Terraform provider for [Anchor](https://anchorapi.nanostack.dev) — manage products,
-product roles, and product resource permissions as code.
+product roles, product resource permissions, license schemas, and license templates as
+code.
 
 Published to the public Terraform Registry as
 [`nanostack-dev/anchor`](https://registry.terraform.io/providers/nanostack-dev/anchor/latest).
@@ -11,6 +12,27 @@ Published to the public Terraform Registry as
 - `anchor_product`
 - `anchor_product_role`
 - `anchor_product_permission`
+- `anchor_license_schema`
+- `anchor_license_template`
+
+## What Terraform does not manage
+
+The provider offers no resource and no data source over an organization's license.
+
+An organization's license is runtime data. It is a copy of a template, and it carries the
+bespoke per-customer adjustments an operator makes after the sale. A Terraform-managed
+license would revert every one of them on the next apply. Write an organization's license
+over the API or through `anchorsdk`.
+
+Schemas and templates stay editable in the admin UI. There is no ownership marker, so a
+conflict shows as ordinary Terraform drift and the operator decides.
+
+## Destroying a license template archives it
+
+Anchor has no delete for a license template, because an organization's license names the
+template as the statement of what it was sold. `terraform destroy` therefore archives the
+template, which cannot be undone. See
+[the resource documentation](./docs/resources/license_template.md).
 
 ## Usage
 
@@ -45,6 +67,18 @@ Provide one of:
 - `api_key` + `product_id` — product API key (`X-Product-API-Key: ...`), env `ANCHOR_API_KEY` / `ANCHOR_PRODUCT_ID`
 
 Base URL: `base_url` arg or env `ANCHOR_BASE_URL` (defaults to `https://anchorapi.nanostack.dev`).
+
+## Acceptance tests
+
+Acceptance tests create real resources against a real Anchor instance. They create their
+own product, so they need a platform bearer token.
+
+```bash
+TF_ACC=1 ANCHOR_BASE_URL=https://apidev.tryanchor.dev ANCHOR_TOKEN=... go test ./... -v
+```
+
+Without `TF_ACC` the acceptance tests skip and `go test ./...` runs the unit tests only,
+which is what CI does.
 
 ## Local development
 
