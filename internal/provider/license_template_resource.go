@@ -14,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -40,6 +41,7 @@ type licenseTemplateResourceModel struct {
 	Name        types.String         `tfsdk:"name"`
 	Description types.String         `tfsdk:"description"`
 	Values      jsontypes.Normalized `tfsdk:"values"`
+	Archived    types.Bool           `tfsdk:"archived"`
 }
 
 func (r *licenseTemplateResource) Metadata(
@@ -59,7 +61,8 @@ func (r *licenseTemplateResource) Schema(
 		Description: "Manages an Anchor license template: a named set of values that satisfies the " +
 			"product's license schema. Every field the schema declares must be set. " +
 			"Destroying this resource archives the template, which cannot be undone — " +
-			"Anchor has no delete for a template, because an organization's license names it.",
+			"Anchor has no delete for a template, because an organization's license names it. " +
+			"Set archived = true to withdraw the tier in place, keeping the resource in state.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:    true,
@@ -91,6 +94,20 @@ func (r *licenseTemplateResource) Schema(
 				Description: "A JSON object holding one value per license field the schema declares. " +
 					"Write it with jsonencode. The values are replaced wholesale on update, and a " +
 					"template that omits any declared field is refused.",
+			},
+			"archived": schema.BoolAttribute{
+				Optional: true,
+				Computed: true,
+				Default:  booldefault.StaticBool(false),
+				Description: "Whether the template is archived. Set to true and apply to withdraw " +
+					"the tier without destroying the resource. Anchor has no route back from " +
+					"archived, so this can only move from false to true — a plan that would move " +
+					"it back is refused. A template archived outside Terraform is reflected here " +
+					"as drift on the next plan; if the configuration still declares false, that " +
+					"plan is refused too, since there is no way to satisfy it.",
+				PlanModifiers: []planmodifier.Bool{
+					preventUnarchiveModifier{},
+				},
 			},
 		},
 	}
@@ -164,17 +181,39 @@ func (r *licenseTemplateResource) Create(
 		return
 	}
 
+	result := createResp.JSON201
+
+	// A template is always born ACTIVE — the create call has no status field —
+	// so a plan that wants archived = true on day one needs a second call.
+	if !plan.Archived.IsUnknown() && plan.Archived.ValueBool() {
+		archiveResp, archiveErr := r.client.ArchiveLicenseTemplateWithResponse(ctx, productID, result.Id)
+		if archiveErr != nil {
+			resp.Diagnostics.AddError("Unable to Archive License Template", archiveErr.Error())
+			return
+		}
+		if archiveResp.JSON200 == nil {
+			resp.Diagnostics.AddError(
+				"Unable to Archive License Template",
+				formatAPIError("archive license template", archiveResp.StatusCode(), archiveResp.Body),
+			)
+			return
+		}
+		result = archiveResp.JSON200
+	}
+
 	// The written values are kept verbatim from the plan. Anchor validates the template
 	// and refuses it, or stores it as sent, so only the identifiers come from the response.
-	plan.ID = types.StringValue(createResp.JSON201.Id)
-	plan.ProductID = types.StringValue(createResp.JSON201.ProductId)
+	plan.ID = types.StringValue(result.Id)
+	plan.ProductID = types.StringValue(result.ProductId)
+	plan.Archived = types.BoolValue(result.Status == nanoclient.LicenseTemplateStatusARCHIVED)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
-// Read removes an archived template from state. An archived tier can be neither edited nor
-// instantiated, so Terraform treats it as gone and the next plan proposes a replacement.
-// Archiving frees the name, so the replacement can keep it.
+// Read reflects the template's status faithfully, archived or not — it never
+// removes an archived template from state. archived is a real, drift-checked
+// attribute now: an out-of-band archive shows up as that attribute flipping
+// to true on the next plan, same as any other externally changed value.
 func (r *licenseTemplateResource) Read(
 	ctx context.Context,
 	req resource.ReadRequest,
@@ -210,11 +249,6 @@ func (r *licenseTemplateResource) Read(
 		return
 	}
 
-	if getResp.JSON200.Status == nanoclient.LicenseTemplateStatusARCHIVED {
-		resp.State.RemoveResource(ctx)
-		return
-	}
-
 	updatedState, diags := licenseTemplateStateFromAPI(getResp.JSON200)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
@@ -229,8 +263,12 @@ func (r *licenseTemplateResource) Update(
 	req resource.UpdateRequest,
 	resp *resource.UpdateResponse,
 ) {
-	var plan licenseTemplateResourceModel
+	var state, plan licenseTemplateResourceModel
 
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
@@ -273,8 +311,33 @@ func (r *licenseTemplateResource) Update(
 		return
 	}
 
-	plan.ID = types.StringValue(updateResp.JSON200.Id)
-	plan.ProductID = types.StringValue(updateResp.JSON200.ProductId)
+	result := updateResp.JSON200
+
+	// preventUnarchiveModifier already refused the other direction, so the only
+	// transition Update ever sees is false -> true: withdraw the tier once the
+	// field edit above (still legal — the template was ACTIVE a moment ago) has
+	// landed.
+	if !state.Archived.ValueBool() && plan.Archived.ValueBool() {
+		archiveResp, archiveErr := r.client.ArchiveLicenseTemplateWithResponse(
+			ctx, productID, plan.ID.ValueString(),
+		)
+		if archiveErr != nil {
+			resp.Diagnostics.AddError("Unable to Archive License Template", archiveErr.Error())
+			return
+		}
+		if archiveResp.JSON200 == nil {
+			resp.Diagnostics.AddError(
+				"Unable to Archive License Template",
+				formatAPIError("archive license template", archiveResp.StatusCode(), archiveResp.Body),
+			)
+			return
+		}
+		result = archiveResp.JSON200
+	}
+
+	plan.ID = types.StringValue(result.Id)
+	plan.ProductID = types.StringValue(result.ProductId)
+	plan.Archived = types.BoolValue(result.Status == nanoclient.LicenseTemplateStatusARCHIVED)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
@@ -361,5 +424,6 @@ func licenseTemplateStateFromAPI(
 		Name:        types.StringValue(template.Name),
 		Description: types.StringPointerValue(template.Description),
 		Values:      jsontypes.NewNormalizedValue(string(encoded)),
+		Archived:    types.BoolValue(template.Status == nanoclient.LicenseTemplateStatusARCHIVED),
 	}, diags
 }

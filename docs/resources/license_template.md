@@ -34,15 +34,12 @@ resource "anchor_license_template" "pro" {
 Declare the dependency on the schema. Anchor validates a template against the schema on
 every write, so the schema must exist first.
 
-## Destroying a template archives it
+## Archiving a template
 
-**`terraform destroy` archives the template. Archiving cannot be undone.**
+**Withdrawing a tier is irreversible. Anchor has no route back from archived.**
 
-Anchor has no delete for a license template. Every organization licensed from a template
-names it as the statement of what they were sold, so the row is kept for good and
-withdrawal is `POST .../templates/{id}/archive`. Archiving is the only withdrawal the API
-offers, so it is what this resource does when Terraform destroys it.
-
+Every organization licensed from a template names it as the statement of what they were
+sold, so a template is never deleted — it is archived, `POST .../templates/{id}/archive`.
 What archiving means:
 
 - The template can no longer be edited or instantiated.
@@ -52,6 +49,35 @@ What archiving means:
 
 An operator who archives the wrong tier recreates it as a new template with the same name.
 The two rows are then distinguishable only by their identifiers and dates.
+
+There are two ways to archive a template through this provider:
+
+### In place, with `archived`
+
+```terraform
+resource "anchor_license_template" "pro" {
+  # ...
+  archived = true
+}
+```
+
+Set `archived = true` and apply. The resource stays in state, so its history and its
+values remain visible in the configuration. This is the way to withdraw a tier without
+losing track of it in Terraform.
+
+`archived` can only move from `false` to `true`. A plan that would move it back is refused
+before any API call is attempted — there is nothing an apply could do to satisfy it. If a
+template was archived outside Terraform, the next plan reports it as drift on this
+attribute; if the configuration still declares `false`, that plan is refused too, and the
+fix is to set `archived = true` to match reality (or `terraform state rm` this resource if
+you no longer want to track it).
+
+### By destroying the resource
+
+**`terraform destroy` also archives the template**, since archiving is the only withdrawal
+the API offers. Destroying removes the resource from Terraform's state the way `destroy`
+normally does; the row itself is kept archived in Anchor, unaffected by the resource
+leaving state.
 
 ## Drift
 
@@ -96,6 +122,7 @@ An archived template cannot be imported.
 
 - `product_id` (String) Product KSUID. Defaults to the provider `product_id`. Changing this forces a new resource.
 - `description` (String) Optional template description.
+- `archived` (Boolean) Whether the template is archived. Set to true and apply to withdraw the tier in place. Can only move from `false` to `true`. Defaults to `false`.
 
 ### Read-Only
 

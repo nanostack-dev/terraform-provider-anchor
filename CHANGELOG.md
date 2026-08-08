@@ -10,13 +10,18 @@
 - `anchor_license_template` — manage a named set of license values that satisfies the
   schema. `values` is a JSON object written with `jsonencode` and compared semantically,
   so whitespace and key order never show as drift.
+- `anchor_license_template` gains `archived` — set it to `true` and apply to withdraw the
+  tier in place, without destroying the resource. It can only move from `false` to `true`;
+  a plan that would move it back is refused before any API call is attempted.
 
 ### Notes
 
-- **Destroying an `anchor_license_template` archives it, and archiving cannot be undone.**
+- **Withdrawing an `anchor_license_template` archives it, and archiving cannot be undone.**
   Anchor has no delete for a template, because an organization's license names it as the
-  statement of what it was sold. A template archived outside Terraform is treated as gone,
-  so the next plan proposes a replacement, which keeps the name because archiving frees it.
+  statement of what it was sold. `terraform destroy` archives it, same as setting
+  `archived = true`. A template archived outside Terraform shows up as drift on the
+  `archived` attribute on the next plan; a configuration that still declares `false` is
+  refused, since there is nothing an apply could do to satisfy it.
 - The provider offers no resource and no data source over an organization's license.
   Licenses are runtime data and carry per-customer adjustments that Terraform would revert.
 - Schemas and templates carry no ownership marker and stay editable in the admin UI. A

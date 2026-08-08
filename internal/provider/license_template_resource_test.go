@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"testing"
 
 	nanoclient "github.com/nanostack-dev/anchor/clients/go"
@@ -46,6 +47,7 @@ func TestAccLicenseTemplate(t *testing.T) {
 						"anchor_license_template.test", "values",
 						`{"max_flows":100,"sso_enabled":true}`,
 					),
+					resource.TestCheckResourceAttr("anchor_license_template.test", "archived", "false"),
 				),
 			},
 			{
@@ -88,9 +90,12 @@ func TestAccLicenseTemplate(t *testing.T) {
 	})
 }
 
-// TestAccLicenseTemplateArchivedOutsideTerraform proves the recovery path of ADR-0010.
-// An archived template can be neither edited nor instantiated, so Terraform treats it as
-// gone and plans a replacement. Archiving frees the name, so the replacement keeps it.
+// TestAccLicenseTemplateArchivedOutsideTerraform proves the recovery path for a template
+// archived behind Terraform's back. archived is a real, drift-checked attribute: the
+// out-of-band archive is caught as ordinary drift, and a config that still declares
+// archived = false cannot be applied — there is nothing the apply could do to satisfy it,
+// since Anchor has no route back from archived. Setting archived = true in config is what
+// converges.
 func TestAccLicenseTemplateArchivedOutsideTerraform(t *testing.T) {
 	productName := acctest.RandomWithPrefix("tfacc-archived")
 	templateName := acctest.RandomWithPrefix("pro")
@@ -104,26 +109,81 @@ func TestAccLicenseTemplateArchivedOutsideTerraform(t *testing.T) {
 		CheckDestroy:             testAccCheckLicenseTemplateArchived(t),
 		Steps: []resource.TestStep{
 			{
-				Config: testAccLicenseTemplateConfig(productName, templateName, 100, true),
+				Config: testAccLicenseTemplateConfigWithArchived(productName, templateName, false),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					testAccCaptureAttr("anchor_license_template.test", "product_id", &productID),
 					testAccCaptureAttr("anchor_license_template.test", "id", &templateID),
+					resource.TestCheckResourceAttr("anchor_license_template.test", "archived", "false"),
 				),
 			},
 			{
-				PreConfig:          testAccArchiveLicenseTemplate(t, &productID, &templateID),
-				Config:             testAccLicenseTemplateConfig(productName, templateName, 100, true),
-				PlanOnly:           true,
-				ExpectNonEmptyPlan: true,
+				// The config still says archived = false, so the refreshed drift and the
+				// config disagree. There is no way to satisfy "false" against a template
+				// Anchor already archived, so the plan itself is refused.
+				PreConfig: testAccArchiveLicenseTemplate(t, &productID, &templateID),
+				Config:    testAccLicenseTemplateConfigWithArchived(productName, templateName, false),
+				PlanOnly:  true,
+				ExpectError: regexp.MustCompile(
+					"Cannot Un-Archive a License Template",
+				),
 			},
 			{
-				Config: testAccLicenseTemplateConfig(productName, templateName, 100, true),
+				// Updating the configuration to match reality is what converges.
+				Config: testAccLicenseTemplateConfigWithArchived(productName, templateName, true),
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("anchor_license_template.test", "name", templateName),
 					resource.TestCheckResourceAttr(
 						"anchor_license_template.test", "values",
 						`{"max_flows":100,"sso_enabled":true}`,
 					),
+					resource.TestCheckResourceAttr("anchor_license_template.test", "archived", "true"),
+				),
+			},
+		},
+	})
+}
+
+// TestAccLicenseTemplateArchiveInPlace archives a template by declaring archived = true and
+// applying, without destroying the resource — the alternative to a Terraform-destroy
+// archive when the operator wants to keep managing the record. Setting archived back to
+// false is refused: Anchor has no route back from archived.
+func TestAccLicenseTemplateArchiveInPlace(t *testing.T) {
+	productName := acctest.RandomWithPrefix("tfacc-archive-inplace")
+	templateName := acctest.RandomWithPrefix("pro")
+
+	var productID string
+	var templateID string
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy:             testAccCheckLicenseTemplateArchived(t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccLicenseTemplateConfigWithArchived(productName, templateName, false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					testAccCaptureAttr("anchor_license_template.test", "product_id", &productID),
+					testAccCaptureAttr("anchor_license_template.test", "id", &templateID),
+					resource.TestCheckResourceAttr("anchor_license_template.test", "archived", "false"),
+				),
+			},
+			{
+				// Declaring archived = true and applying withdraws the tier without
+				// destroying the resource — the record stays in state.
+				Config: testAccLicenseTemplateConfigWithArchived(productName, templateName, true),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("anchor_license_template.test", "archived", "true"),
+					testAccCheckLicenseTemplateStatus(
+						t, &productID, &templateID, nanoclient.LicenseTemplateStatusARCHIVED,
+					),
+				),
+			},
+			{
+				// There is no way back. The plan modifier refuses this before any API
+				// call is attempted.
+				Config: testAccLicenseTemplateConfigWithArchived(productName, templateName, false),
+				ExpectError: regexp.MustCompile(
+					"Cannot Un-Archive a License Template",
 				),
 			},
 		},
@@ -169,6 +229,51 @@ resource "anchor_license_template" "test" {
   depends_on = [anchor_license_schema.test]
 }
 `, productName, templateName, maxFlows, ssoEnabled)
+}
+
+// testAccLicenseTemplateConfigWithArchived is testAccLicenseTemplateConfig plus an explicit
+// archived argument, for the tests whose subject is that attribute. Values are fixed: these
+// tests are about the archived transition, not about what the template holds.
+func testAccLicenseTemplateConfigWithArchived(productName, templateName string, archived bool) string {
+	return fmt.Sprintf(`
+resource "anchor_product" "test" {
+  name        = %[1]q
+  description = "Terraform provider acceptance test."
+}
+
+resource "anchor_license_schema" "test" {
+  product_id = anchor_product.test.id
+
+  fields = [
+    {
+      name = "max_flows"
+      type = "LIMIT"
+      rules = {
+        min = 0
+        max = 100000
+      }
+    },
+    {
+      name = "sso_enabled"
+      type = "BOOLEAN"
+    },
+  ]
+}
+
+resource "anchor_license_template" "test" {
+  product_id  = anchor_product.test.id
+  name        = %[2]q
+  description = "Acceptance test tier."
+  archived    = %[3]t
+
+  values = jsonencode({
+    max_flows   = 100
+    sso_enabled = true
+  })
+
+  depends_on = [anchor_license_schema.test]
+}
+`, productName, templateName, archived)
 }
 
 func testAccLicenseTemplateImportID(state *terraform.State) (string, error) {
@@ -236,6 +341,30 @@ func testAccArchiveLicenseTemplate(t *testing.T, productID, templateID *string) 
 		if archiveResp.StatusCode() != http.StatusOK {
 			t.Fatalf("archive the license template: status %d: %s", archiveResp.StatusCode(), archiveResp.Body)
 		}
+	}
+}
+
+// testAccCheckLicenseTemplateStatus asserts the template's status directly against the API,
+// independent of what Terraform's own state says.
+func testAccCheckLicenseTemplateStatus(
+	t *testing.T, productID, templateID *string, want nanoclient.LicenseTemplateStatus,
+) resource.TestCheckFunc {
+	return func(*terraform.State) error {
+		t.Helper()
+
+		client := testAccClient(t)
+		getResp, err := client.GetLicenseTemplateWithResponse(testAccContext(t), *productID, *templateID)
+		if err != nil {
+			return fmt.Errorf("read license template status: %w", err)
+		}
+		if getResp.JSON200 == nil {
+			return fmt.Errorf("read license template status: status %d: %s", getResp.StatusCode(), getResp.Body)
+		}
+		if getResp.JSON200.Status != want {
+			return fmt.Errorf("license template status is %s, want %s", getResp.JSON200.Status, want)
+		}
+
+		return nil
 	}
 }
 

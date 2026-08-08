@@ -27,11 +27,12 @@ over the API or through `anchorsdk`.
 Schemas and templates stay editable in the admin UI. There is no ownership marker, so a
 conflict shows as ordinary Terraform drift and the operator decides.
 
-## Destroying a license template archives it
+## Archiving a license template
 
 Anchor has no delete for a license template, because an organization's license names the
-template as the statement of what it was sold. `terraform destroy` therefore archives the
-template, which cannot be undone. See
+template as the statement of what it was sold. Withdrawing a tier archives it instead,
+which cannot be undone — either in place, by setting `archived = true` on the resource and
+applying, or by `terraform destroy`, which archives it too. See
 [the resource documentation](./docs/resources/license_template.md).
 
 ## Usage
