@@ -1,5 +1,5 @@
-# Withdrawing a license template archives it. Archiving cannot be undone, either way
-# it happens — `terraform destroy` archives it, and so does the `archived` attribute.
+# terraform destroy deletes a template outright, but only if no organization license
+# names it — a fixture like this one that nothing was ever sold from is destroyable.
 resource "anchor_license_template" "free" {
   product_id  = anchor_product.echopoint.id
   name        = "Free"

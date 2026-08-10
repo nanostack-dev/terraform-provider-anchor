@@ -34,25 +34,26 @@ resource "anchor_license_template" "pro" {
 Declare the dependency on the schema. Anchor validates a template against the schema on
 every write, so the schema must exist first.
 
-## Archiving a template
+## Withdrawing a template
 
-**Withdrawing a tier is irreversible. Anchor has no route back from archived.**
+A template with customers cannot be un-sold, so Anchor offers two ways to withdraw one and
+they answer two different questions.
 
-Every organization licensed from a template names it as the statement of what they were
-sold, so a template is never deleted — it is archived, `POST .../templates/{id}/archive`.
-What archiving means:
+### Destroying the resource: delete if nobody was ever sold it
 
-- The template can no longer be edited or instantiated.
-- It still resolves by identifier and still appears in the product's template listing.
-- Its name is freed, so a replacement template can take it.
-- Organizations already licensed from it keep their own copy of the values, unchanged.
+`terraform destroy` calls Anchor's `DELETE`, which removes the row outright — but only if
+no organization license names the template. If one does, the destroy fails with a clear
+error naming the reference, and the resource stays in state exactly as Terraform's destroy
+semantics already promise on any failed destroy. Terraform cannot resolve that reference
+itself: organization licenses are API-only, and this provider offers no resource or data
+source over one. Release the reference outside Terraform, or archive the tier in place
+instead (below) rather than destroying the resource.
 
-An operator who archives the wrong tier recreates it as a new template with the same name.
-The two rows are then distinguishable only by their identifiers and dates.
+This is the ordinary path for a template Terraform created and is now retiring in the same
+breath — a tier drafted and abandoned before anyone bought it, or a fixture an acceptance
+test tears down after itself.
 
-There are two ways to archive a template through this provider:
-
-### In place, with `archived`
+### In place, with `archived`: withdraw a tier that has customers
 
 ```terraform
 resource "anchor_license_template" "pro" {
@@ -61,33 +62,28 @@ resource "anchor_license_template" "pro" {
 }
 ```
 
-Set `archived = true` and apply. The resource stays in state, so its history and its
-values remain visible in the configuration. This is the way to withdraw a tier without
-losing track of it in Terraform.
+Set `archived = true` and apply. Archiving works whether or not the template is
+referenced, and the resource stays in state, so its history and its values remain visible
+in the configuration — the way to withdraw a tier without losing track of it in Terraform.
+**This is irreversible.** Anchor has no route back from archived: `archived` can only move
+from `false` to `true`, and a plan that would move it back is refused before any API call
+is attempted.
 
-`archived` can only move from `false` to `true`. A plan that would move it back is refused
-before any API call is attempted — there is nothing an apply could do to satisfy it. If a
-template was archived outside Terraform, the next plan reports it as drift on this
+If a template was archived outside Terraform, the next plan reports it as drift on this
 attribute; if the configuration still declares `false`, that plan is refused too, and the
 fix is to set `archived = true` to match reality (or `terraform state rm` this resource if
 you no longer want to track it).
 
-### By destroying the resource
-
-**`terraform destroy` also archives the template**, since archiving is the only withdrawal
-the API offers. Destroying removes the resource from Terraform's state the way `destroy`
-normally does; the row itself is kept archived in Anchor, unaffected by the resource
-leaving state.
+An operator who archives the wrong tier recreates it as a new template with the same name
+— archiving frees the name — and the two rows are then distinguishable only by their
+identifiers and dates.
 
 ## Drift
 
 A template edited in the admin UI shows as ordinary drift on the next plan. There is no
 ownership marker and the UI stays editable, so the operator decides whether to keep the
-edit or let the next apply revert it.
-
-A template **archived** outside Terraform is treated as gone: it can be neither edited nor
-instantiated, so the next plan proposes creating a replacement. Because archiving frees the
-name, the replacement keeps the name the configuration declares.
+edit or let the next apply revert it. An archived template is read faithfully rather than
+treated as gone — see `archived`, above.
 
 ## Values
 
@@ -109,7 +105,7 @@ colon.
 terraform import anchor_license_template.pro prd_2ikcVW44U7UtqJHCOTqHuwkgrBb:license_template_5mNOPqRsTuVwXyZ
 ```
 
-An archived template cannot be imported.
+An archived template imports fine — `archived` reads as `true`.
 
 ## Schema
 
