@@ -139,6 +139,8 @@ github.com/mitchellh/reflectwalk v1.0.2 h1:G2LzWKi524PWgd3mLHV8Y5k7s6XUvT0Gef6zx
 github.com/mitchellh/reflectwalk v1.0.2/go.mod h1:mSTlrgnPZtwu0c4WaC2kGObEpuNDbx0jmZXqmk4esnw=
 github.com/nanostack-dev/anchor/clients/go v0.9.0 h1:pAmo/0iiA6gVCvggeHj66E+mYQd3oTh59oURwsniTps=
 github.com/nanostack-dev/anchor/clients/go v0.9.0/go.mod h1:6yKkiYTz0Dq3QvaKQm28+8wTnk3RRqWIpJmprW35QOQ=
+github.com/nanostack-dev/anchor/clients/go v0.9.1-0.20260808020739-0218b0897267 h1:CxOa/WGS0Ia6iqMuDVtooGV49G4iWZGgVBcYKJKgcNs=
+github.com/nanostack-dev/anchor/clients/go v0.9.1-0.20260808020739-0218b0897267/go.mod h1:6yKkiYTz0Dq3QvaKQm28+8wTnk3RRqWIpJmprW35QOQ=
 github.com/oapi-codegen/nullable v1.1.0 h1:eAh8JVc5430VtYVnq00Hrbpag9PFRGWLjxR1/3KntMs=
 github.com/oapi-codegen/nullable v1.1.0/go.mod h1:KUZ3vUzkmEKY90ksAmit2+5juDIhIZhfDl+0PwOQlFY=
 github.com/oapi-codegen/runtime v1.6.0 h1:7Xx+GlueD6nRuyKoCPzL434Jfi3BetbiJOrzCHp/VPU=

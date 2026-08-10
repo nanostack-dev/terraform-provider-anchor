@@ -7,7 +7,12 @@ require (
 	github.com/hashicorp/terraform-plugin-framework-jsontypes v0.2.0
 	github.com/hashicorp/terraform-plugin-go v0.31.0
 	github.com/hashicorp/terraform-plugin-testing v1.16.0
-	github.com/nanostack-dev/anchor/clients/go v0.9.0
+	// TEMPORARY pseudo-version pinned at nanostack-dev/anchor#86's commit, which carries
+	// DeleteLicenseTemplateWithResponse. Do not merge this PR before replacing it with a
+	// real tagged version — cut once #86 merges to main:
+	//   go get github.com/nanostack-dev/anchor/clients/go@v0.10.0  # or whatever tag follows
+	//   go mod tidy
+	github.com/nanostack-dev/anchor/clients/go v0.9.1-0.20260808020739-0218b0897267
 )
 
 require (

@@ -12,6 +12,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
+	"github.com/hashicorp/terraform-plugin-testing/helper/acctest"
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
@@ -70,6 +71,52 @@ func testAccClient(t *testing.T) *nanoclient.ClientWithResponses {
 func testAccContext(t *testing.T) context.Context {
 	t.Helper()
 	return t.Context()
+}
+
+// testAccProductAPIKeyClient mints a fresh product API key scoped to permissions and
+// returns a client authenticated with it.
+//
+// Creating an organization and instantiating a license both require a product API key —
+// platform bearer auth answers 401, not merely 403, for either route — so a test whose
+// subject is one of them cannot go through testAccClient the way every other helper does.
+func testAccProductAPIKeyClient(
+	t *testing.T, productID string, permissions []string,
+) *nanoclient.ClientWithResponses {
+	t.Helper()
+
+	keyResp, err := testAccClient(t).CreateProductAPIKeyWithResponse(
+		testAccContext(t), productID,
+		nanoclient.CreateProductAPIKeyJSONRequestBody{
+			Name:        acctest.RandomWithPrefix("tfacc-key"),
+			Permissions: permissions,
+		},
+	)
+	if err != nil {
+		t.Fatalf("create product API key: %v", err)
+	}
+	if keyResp.JSON201 == nil {
+		t.Fatalf("create product API key: status %d: %s", keyResp.StatusCode(), keyResp.Body)
+	}
+
+	baseURL := os.Getenv("ANCHOR_BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://anchorapi.nanostack.dev"
+	}
+
+	client, err := nanoclient.NewClientWithConfig(nanoclient.Config{
+		BaseURL: baseURL,
+		RequestEditors: []nanoclient.RequestEditorFn{
+			func(_ context.Context, req *http.Request) error {
+				req.Header.Set("X-Product-Api-Key", keyResp.JSON201.Value)
+				return nil
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("build product API key client: %v", err)
+	}
+
+	return client
 }
 
 // testAccCaptureAttr copies an attribute out of the Terraform state into target, so a

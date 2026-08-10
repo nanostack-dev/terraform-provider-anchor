@@ -26,7 +26,10 @@
   Licenses are runtime data and carry per-customer adjustments that Terraform would revert.
 - Schemas and templates carry no ownership marker and stay editable in the admin UI. A
   conflict shows as ordinary Terraform drift.
-- The Anchor Go client moves to `v0.9.0`, which carries the licensing routes.
+- The Anchor Go client moves to `v0.9.0`, which carries the licensing routes, then to a
+  pseudo-version pinned at `nanostack-dev/anchor#86`'s commit, which carries the delete
+  route `Delete()` on `anchor_license_template` now uses. **That pin must be replaced
+  with a real tagged version before this is released** — see the note in `go.mod`.
 
 ## 0.1.0 (2026-06-06)
 

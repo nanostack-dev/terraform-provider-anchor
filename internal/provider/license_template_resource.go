@@ -345,6 +345,12 @@ func (r *licenseTemplateResource) Update(
 // Delete archives the template. Anchor keeps the row for good, because the organizations
 // licensed from it name it as the statement of what they were sold, so there is no delete
 // to call. Archiving is the one withdrawal the API offers and it cannot be undone.
+// Delete removes the template outright. Anchor refuses this with a 400 if any
+// organization license still names the template — there is no cascade and no
+// force, and the fix is not a Terraform concept: either resolve the reference
+// (outside Terraform; organization licenses are API-only, see ADR-0006 in the
+// anchor repository), or withdraw the tier in place instead of destroying the
+// resource, by setting archived = true and applying.
 func (r *licenseTemplateResource) Delete(
 	ctx context.Context,
 	req resource.DeleteRequest,
@@ -357,20 +363,32 @@ func (r *licenseTemplateResource) Delete(
 		return
 	}
 
-	archiveResp, err := r.client.ArchiveLicenseTemplateWithResponse(
+	deleteResp, err := r.client.DeleteLicenseTemplateWithResponse(
 		ctx,
 		state.ProductID.ValueString(),
 		state.ID.ValueString(),
 	)
 	if err != nil {
-		resp.Diagnostics.AddError("Unable to Archive License Template", err.Error())
+		resp.Diagnostics.AddError("Unable to Delete License Template", err.Error())
 		return
 	}
 
-	if archiveResp.StatusCode() != http.StatusOK && archiveResp.StatusCode() != http.StatusNotFound {
+	switch deleteResp.StatusCode() {
+	case http.StatusNoContent, http.StatusNotFound:
+		return
+	case http.StatusBadRequest:
 		resp.Diagnostics.AddError(
-			"Unable to Archive License Template",
-			formatAPIError("archive license template", archiveResp.StatusCode(), archiveResp.Body),
+			"License Template Is Still In Use",
+			"Anchor refused to delete this template because at least one organization "+
+				"license still names it: "+apiErrorMessages(deleteResp.JSON400)+". "+
+				"Terraform cannot resolve that reference — organization licenses are API-only "+
+				"and are never managed here. Withdraw the tier in place instead by setting "+
+				"archived = true on this resource and applying, rather than destroying it.",
+		)
+	default:
+		resp.Diagnostics.AddError(
+			"Unable to Delete License Template",
+			formatAPIError("delete license template", deleteResp.StatusCode(), deleteResp.Body),
 		)
 	}
 }

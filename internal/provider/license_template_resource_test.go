@@ -16,7 +16,10 @@ import (
 
 // TestAccLicenseTemplate covers the whole life of a license template: create it, edit its
 // values, report drift after an edit made outside Terraform, correct that drift, and
-// destroy it. Destroying a template archives it, because Anchor has no delete for one.
+// destroy it. This template is never referenced by an organization license, so destroy
+// removes it outright — see TestAccLicenseTemplateDeleteBlockedWhenReferenced for the
+// other case, and TestAccLicenseTemplateArchiveInPlace for withdrawing one without
+// destroying the resource.
 func TestAccLicenseTemplate(t *testing.T) {
 	productName := acctest.RandomWithPrefix("tfacc-template")
 	templateName := acctest.RandomWithPrefix("pro")
@@ -27,7 +30,7 @@ func TestAccLicenseTemplate(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		CheckDestroy:             testAccCheckLicenseTemplateArchived(t),
+		CheckDestroy:             testAccCheckLicenseTemplateDestroyed(t),
 		Steps: []resource.TestStep{
 			{
 				Config: testAccLicenseTemplateConfig(productName, templateName, 100, true),
@@ -106,7 +109,7 @@ func TestAccLicenseTemplateArchivedOutsideTerraform(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		CheckDestroy:             testAccCheckLicenseTemplateArchived(t),
+		CheckDestroy:             testAccCheckLicenseTemplateDestroyed(t),
 		Steps: []resource.TestStep{
 			{
 				Config: testAccLicenseTemplateConfigWithArchived(productName, templateName, false),
@@ -157,7 +160,7 @@ func TestAccLicenseTemplateArchiveInPlace(t *testing.T) {
 	resource.Test(t, resource.TestCase{
 		PreCheck:                 func() { testAccPreCheck(t) },
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
-		CheckDestroy:             testAccCheckLicenseTemplateArchived(t),
+		CheckDestroy:             testAccCheckLicenseTemplateDestroyed(t),
 		Steps: []resource.TestStep{
 			{
 				Config: testAccLicenseTemplateConfigWithArchived(productName, templateName, false),
@@ -188,6 +191,157 @@ func TestAccLicenseTemplateArchiveInPlace(t *testing.T) {
 			},
 		},
 	})
+}
+
+// TestAccLicenseTemplateDeleteBlockedWhenReferenced proves the guard ADR-0011 (in the
+// anchor repository) added to DELETE: Terraform's destroy is refused, with a clear
+// diagnostic, while an organization license names the template. Organization licenses
+// are API-only (ADR-0006) — Terraform cannot resolve the reference itself, so the test
+// releases it directly through the client, the same way an operator would.
+func TestAccLicenseTemplateDeleteBlockedWhenReferenced(t *testing.T) {
+	productName := acctest.RandomWithPrefix("tfacc-template-inuse")
+	templateName := acctest.RandomWithPrefix("pro")
+
+	var productID string
+	var templateID string
+	var organizationID string
+
+	resource.Test(t, resource.TestCase{
+		PreCheck:                 func() { testAccPreCheck(t) },
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		CheckDestroy:             testAccCheckLicenseTemplateDestroyed(t),
+		Steps: []resource.TestStep{
+			{
+				Config: testAccLicenseTemplateConfigWithArchived(productName, templateName, false),
+				Check: resource.ComposeAggregateTestCheckFunc(
+					testAccCaptureAttr("anchor_license_template.test", "product_id", &productID),
+					testAccCaptureAttr("anchor_license_template.test", "id", &templateID),
+					testAccInstantiateOrganizationLicense(t, &productID, &templateID, &organizationID),
+				),
+			},
+			{
+				// The configuration no longer declares the template, so applying plans
+				// its destruction. Anchor refuses: the organization above still holds a
+				// license naming it, and Terraform surfaces that refusal rather than a
+				// raw API error dump.
+				Config: testAccProductOnlyConfig(productName),
+				ExpectError: regexp.MustCompile(
+					"(?s)License Template Is Still In Use.*organization license",
+				),
+			},
+			{
+				// Releasing the reference is what unblocks the same destroy. Deleting the
+				// organization cascades its license away — organization_licenses has
+				// ON DELETE CASCADE on the organization foreign key — which is the
+				// simplest release available; there is no direct "unlicense" route.
+				PreConfig: testAccDeleteOrganization(t, &productID, &organizationID),
+				Config:    testAccProductOnlyConfig(productName),
+			},
+		},
+	})
+}
+
+// testAccInstantiateOrganizationLicense creates an organization and instantiates the
+// template onto it, so the template becomes one a real customer was sold — outside
+// Terraform, since organization licenses are never managed here.
+func testAccInstantiateOrganizationLicense(
+	t *testing.T, productID, templateID, organizationID *string,
+) resource.TestCheckFunc {
+	return func(*terraform.State) error {
+		t.Helper()
+
+		if *productID == "" || *templateID == "" {
+			return errors.New("no template captured from the Terraform state")
+		}
+
+		// Platform bearer auth answers 401 for organization and license routes; both
+		// need a product API key, minted here rather than through testAccClient.
+		client := testAccProductAPIKeyClient(
+			t, *productID, []string{"organization:create", "organization_license:create"},
+		)
+		ctx := testAccContext(t)
+
+		orgResp, err := client.CreateProductOrganizationWithResponse(
+			ctx, *productID,
+			nanoclient.CreateProductOrganizationJSONRequestBody{Name: acctest.RandomWithPrefix("tfacc-org")},
+		)
+		if err != nil {
+			return fmt.Errorf("create organization: %w", err)
+		}
+		if orgResp.JSON201 == nil {
+			return fmt.Errorf("create organization: status %d: %s", orgResp.StatusCode(), orgResp.Body)
+		}
+		*organizationID = orgResp.JSON201.Id
+
+		instResp, err := client.InstantiateOrganizationLicenseWithResponse(
+			ctx, *productID, *organizationID,
+			nanoclient.InstantiateOrganizationLicenseJSONRequestBody{TemplateId: *templateID},
+		)
+		if err != nil {
+			return fmt.Errorf("instantiate organization license: %w", err)
+		}
+		if instResp.JSON201 == nil {
+			return fmt.Errorf(
+				"instantiate organization license: status %d: %s", instResp.StatusCode(), instResp.Body,
+			)
+		}
+
+		return nil
+	}
+}
+
+// testAccDeleteOrganization releases a template's only reference by removing the
+// organization licensed from it.
+func testAccDeleteOrganization(t *testing.T, productID, organizationID *string) func() {
+	return func() {
+		t.Helper()
+
+		if *productID == "" || *organizationID == "" {
+			t.Fatal("no organization captured to release")
+		}
+
+		client := testAccProductAPIKeyClient(t, *productID, []string{"organization:delete"})
+		resp, err := client.DeleteProductOrganizationWithResponse(
+			testAccContext(t), *productID, *organizationID,
+		)
+		if err != nil {
+			t.Fatalf("delete organization: %v", err)
+		}
+		if resp.StatusCode() != http.StatusNoContent {
+			t.Fatalf("delete organization: status %d: %s", resp.StatusCode(), resp.Body)
+		}
+	}
+}
+
+// testAccProductOnlyConfig is testAccLicenseTemplateConfigWithArchived's product and
+// schema, without the template — declaring this after a template has been created is
+// what plans the template's destruction, since it drops out of the configuration.
+func testAccProductOnlyConfig(productName string) string {
+	return fmt.Sprintf(`
+resource "anchor_product" "test" {
+  name        = %[1]q
+  description = "Terraform provider acceptance test."
+}
+
+resource "anchor_license_schema" "test" {
+  product_id = anchor_product.test.id
+
+  fields = [
+    {
+      name = "max_flows"
+      type = "LIMIT"
+      rules = {
+        min = 0
+        max = 100000
+      }
+    },
+    {
+      name = "sso_enabled"
+      type = "BOOLEAN"
+    },
+  ]
+}
+`, productName)
 }
 
 func testAccLicenseTemplateConfig(productName, templateName string, maxFlows int, ssoEnabled bool) string {
@@ -368,9 +522,10 @@ func testAccCheckLicenseTemplateStatus(
 	}
 }
 
-// testAccCheckLicenseTemplateArchived asserts that destroy archived every template. Anchor
-// keeps the row for good, so the record still resolves and only the status changes.
-func testAccCheckLicenseTemplateArchived(t *testing.T) resource.TestCheckFunc {
+// testAccCheckLicenseTemplateDestroyed asserts that destroy actually removed every
+// template none of these tests ever reference from an organization: with the real
+// DELETE route wired, an unreferenced template's row is gone, not merely archived.
+func testAccCheckLicenseTemplateDestroyed(t *testing.T) resource.TestCheckFunc {
 	return func(state *terraform.State) error {
 		client := testAccClient(t)
 
@@ -385,20 +540,11 @@ func testAccCheckLicenseTemplateArchived(t *testing.T) resource.TestCheckFunc {
 				res.Primary.ID,
 			)
 			if err != nil {
-				return fmt.Errorf("check %s was archived: %w", name, err)
+				return fmt.Errorf("check %s was destroyed: %w", name, err)
 			}
 
-			// The product is destroyed in the same run, so a gone template is acceptable too.
-			if getResp.StatusCode() == http.StatusNotFound {
-				continue
-			}
-
-			if getResp.JSON200 == nil {
-				return fmt.Errorf("check %s was archived: status %d", name, getResp.StatusCode())
-			}
-
-			if getResp.JSON200.Status != nanoclient.LicenseTemplateStatusARCHIVED {
-				return fmt.Errorf("%s is still %s", name, getResp.JSON200.Status)
+			if getResp.StatusCode() != http.StatusNotFound {
+				return fmt.Errorf("%s still exists: status %d: %s", name, getResp.StatusCode(), getResp.Body)
 			}
 		}
 
