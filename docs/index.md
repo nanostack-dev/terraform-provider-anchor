@@ -1,13 +1,18 @@
 ---
 page_title: "Anchor Provider"
 description: |-
-  The Anchor provider manages products, product roles, and product resource permissions.
+  The Anchor provider manages products, product roles, product resource permissions, license schemas, and license templates.
 ---
 
 # Anchor Provider
 
 The Anchor provider manages [Anchor](https://anchorapi.nanostack.dev) products,
-product roles, and product resource permissions.
+product roles, product resource permissions, license schemas, and license templates.
+
+The provider manages the declarative half of licensing. It offers no resource and no data
+source over an organization's license: that is runtime data, it carries bespoke
+per-customer adjustments, and Terraform would revert every one of them on the next apply.
+Write an organization's license over the API or through `anchorsdk`.
 
 ## Example Usage
 
