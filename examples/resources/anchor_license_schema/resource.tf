@@ -6,6 +6,7 @@ resource "anchor_license_schema" "echopoint" {
     {
       name        = "max_flows"
       type        = "LIMIT"
+      usage_shape = "GAUGE"
       description = "Flows an organization can hold."
       rules = {
         min = 0

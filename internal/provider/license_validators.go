@@ -13,6 +13,7 @@ import (
 
 var (
 	_ validator.String  = (*licenseFieldTypeValidator)(nil)
+	_ validator.String  = (*licenseUsageShapeValidator)(nil)
 	_ validator.Object  = (*nonEmptyObjectValidator)(nil)
 	_ planmodifier.Bool = (*preventUnarchiveModifier)(nil)
 )
@@ -25,6 +26,13 @@ func licenseFieldTypeNames() []string {
 		string(nanoclient.LicenseFieldTypeLIMIT),
 		string(nanoclient.LicenseFieldTypeNUMBER),
 		string(nanoclient.LicenseFieldTypeSTRING),
+	}
+}
+
+func licenseUsageShapeNames() []string {
+	return []string{
+		string(nanoclient.GAUGE),
+		string(nanoclient.WINDOWEDCOUNTER),
 	}
 }
 
@@ -57,6 +65,40 @@ func (v licenseFieldTypeValidator) ValidateString(
 		fmt.Sprintf(
 			"Expected one of %s, got: %q.",
 			strings.Join(licenseFieldTypeNames(), ", "),
+			req.ConfigValue.ValueString(),
+		),
+	)
+}
+
+type licenseUsageShapeValidator struct{}
+
+func (v licenseUsageShapeValidator) Description(_ context.Context) string {
+	return "value must be one of: " + strings.Join(licenseUsageShapeNames(), ", ")
+}
+
+func (v licenseUsageShapeValidator) MarkdownDescription(ctx context.Context) string {
+	return v.Description(ctx)
+}
+
+func (v licenseUsageShapeValidator) ValidateString(
+	_ context.Context,
+	req validator.StringRequest,
+	resp *validator.StringResponse,
+) {
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
+		return
+	}
+
+	if nanoclient.UsageShape(req.ConfigValue.ValueString()).Valid() {
+		return
+	}
+
+	resp.Diagnostics.AddAttributeError(
+		req.Path,
+		"Invalid Usage Shape",
+		fmt.Sprintf(
+			"Expected one of %s, got: %q.",
+			strings.Join(licenseUsageShapeNames(), ", "),
 			req.ConfigValue.ValueString(),
 		),
 	)

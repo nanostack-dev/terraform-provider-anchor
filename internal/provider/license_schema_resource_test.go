@@ -44,6 +44,7 @@ func TestAccLicenseSchema(t *testing.T) {
 						map[string]string{
 							"name":        "max_flows",
 							"type":        "LIMIT",
+							"usage_shape": "GAUGE",
 							"description": "Flows an organization can hold.",
 							"rules.min":   "0",
 							"rules.max":   "100000",
@@ -121,6 +122,7 @@ resource "anchor_license_schema" "test" {
     {
       name        = "max_flows"
       type        = "LIMIT"
+      usage_shape = "GAUGE"
       description = %[2]q
       rules = {
         min = 0
@@ -158,10 +160,12 @@ func testAccDriftLicenseSchema(t *testing.T, productID *string) func() {
 
 		client := testAccClient(t)
 		description := "Edited outside Terraform."
+		shape := nanoclient.GAUGE
 		fields := []nanoclient.LicenseFieldDeclaration{
 			{
-				Name: "max_flows",
-				Type: nanoclient.LicenseFieldTypeLIMIT,
+				Name:       "max_flows",
+				Type:       nanoclient.LicenseFieldTypeLIMIT,
+				UsageShape: &shape,
 			},
 		}
 
