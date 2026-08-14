@@ -20,9 +20,10 @@ import (
 )
 
 var (
-	_ resource.Resource                = (*licenseSchemaResource)(nil)
-	_ resource.ResourceWithConfigure   = (*licenseSchemaResource)(nil)
-	_ resource.ResourceWithImportState = (*licenseSchemaResource)(nil)
+	_ resource.Resource                   = (*licenseSchemaResource)(nil)
+	_ resource.ResourceWithConfigure      = (*licenseSchemaResource)(nil)
+	_ resource.ResourceWithImportState    = (*licenseSchemaResource)(nil)
+	_ resource.ResourceWithValidateConfig = (*licenseSchemaResource)(nil)
 )
 
 func NewLicenseSchemaResource() resource.Resource {
@@ -45,6 +46,7 @@ type licenseFieldModel struct {
 	Name        types.String `tfsdk:"name"`
 	Type        types.String `tfsdk:"type"`
 	Description types.String `tfsdk:"description"`
+	UsageShape  types.String `tfsdk:"usage_shape"`
 	Rules       types.Object `tfsdk:"rules"`
 }
 
@@ -73,12 +75,85 @@ func licenseFieldAttrTypes() map[string]attr.Type {
 		"name":        types.StringType,
 		"type":        types.StringType,
 		"description": types.StringType,
+		"usage_shape": types.StringType,
 		"rules":       types.ObjectType{AttrTypes: licenseFieldRulesAttrTypes()},
 	}
 }
 
 func licenseFieldObjectType() attr.Type {
 	return types.ObjectType{AttrTypes: licenseFieldAttrTypes()}
+}
+
+func licenseSchemaFieldAttributes() map[string]schema.Attribute {
+	return map[string]schema.Attribute{
+		"name": schema.StringAttribute{
+			Required:    true,
+			Description: "Stable identifier used by product code, unique within the schema.",
+		},
+		"type": schema.StringAttribute{
+			Required:    true,
+			Description: "License field type. One of BOOLEAN, ENUM, LIMIT, NUMBER, STRING.",
+			Validators: []validator.String{
+				licenseFieldTypeValidator{},
+			},
+		},
+		"description": schema.StringAttribute{
+			Optional:    true,
+			Description: "Optional field description.",
+		},
+		"usage_shape": schema.StringAttribute{
+			Optional: true,
+			Description: "Required when type is LIMIT, and refused for every other type. " +
+				"GAUGE is a point-in-time reading. WINDOWED_COUNTER is a count over an " +
+				"explicit [from, to) window. Every usage report against the field must " +
+				"match this shape.",
+			Validators: []validator.String{
+				licenseUsageShapeValidator{},
+			},
+		},
+		"rules": schema.SingleNestedAttribute{
+			Optional: true,
+			Description: "Validation rules applied when a license value is set. Omit the " +
+				"block to declare a field with no rules.",
+			Validators: []validator.Object{
+				nonEmptyObjectValidator{
+					message: "Set at least one rule, or remove the rules block. " +
+						"Anchor treats an empty rule set and an absent one as the same thing.",
+				},
+			},
+			Attributes: licenseFieldRulesAttributes(),
+		},
+	}
+}
+
+func licenseFieldRulesAttributes() map[string]schema.Attribute {
+	return map[string]schema.Attribute{
+		"min": schema.Float64Attribute{
+			Optional:    true,
+			Description: "Inclusive lower bound. Numeric fields only.",
+		},
+		"max": schema.Float64Attribute{
+			Optional:    true,
+			Description: "Inclusive upper bound. Numeric fields only.",
+		},
+		"min_length": schema.Int64Attribute{
+			Optional:    true,
+			Description: "Inclusive minimum length in runes. String fields only.",
+		},
+		"max_length": schema.Int64Attribute{
+			Optional:    true,
+			Description: "Inclusive maximum length in runes. String fields only.",
+		},
+		"pattern": schema.StringAttribute{
+			Optional:    true,
+			Description: "Regular expression the value must match. String fields only.",
+		},
+		"values": schema.ListAttribute{
+			Optional:    true,
+			ElementType: types.StringType,
+			Description: "The list the value must be drawn from. Enum fields only.",
+		},
+	}
 }
 
 func (r *licenseSchemaResource) Metadata(
@@ -124,61 +199,7 @@ func (r *licenseSchemaResource) Schema(
 				Description: "Every license field the schema declares. The set is replaced wholesale on " +
 					"update: a field you remove here is removed from the schema.",
 				NestedObject: schema.NestedAttributeObject{
-					Attributes: map[string]schema.Attribute{
-						"name": schema.StringAttribute{
-							Required:    true,
-							Description: "Stable identifier used by product code, unique within the schema.",
-						},
-						"type": schema.StringAttribute{
-							Required:    true,
-							Description: "License field type. One of BOOLEAN, ENUM, LIMIT, NUMBER, STRING.",
-							Validators: []validator.String{
-								licenseFieldTypeValidator{},
-							},
-						},
-						"description": schema.StringAttribute{
-							Optional:    true,
-							Description: "Optional field description.",
-						},
-						"rules": schema.SingleNestedAttribute{
-							Optional: true,
-							Description: "Validation rules applied when a license value is set. Omit the " +
-								"block to declare a field with no rules.",
-							Validators: []validator.Object{
-								nonEmptyObjectValidator{
-									message: "Set at least one rule, or remove the rules block. " +
-										"Anchor treats an empty rule set and an absent one as the same thing.",
-								},
-							},
-							Attributes: map[string]schema.Attribute{
-								"min": schema.Float64Attribute{
-									Optional:    true,
-									Description: "Inclusive lower bound. Numeric fields only.",
-								},
-								"max": schema.Float64Attribute{
-									Optional:    true,
-									Description: "Inclusive upper bound. Numeric fields only.",
-								},
-								"min_length": schema.Int64Attribute{
-									Optional:    true,
-									Description: "Inclusive minimum length in runes. String fields only.",
-								},
-								"max_length": schema.Int64Attribute{
-									Optional:    true,
-									Description: "Inclusive maximum length in runes. String fields only.",
-								},
-								"pattern": schema.StringAttribute{
-									Optional:    true,
-									Description: "Regular expression the value must match. String fields only.",
-								},
-								"values": schema.ListAttribute{
-									Optional:    true,
-									ElementType: types.StringType,
-									Description: "The list the value must be drawn from. Enum fields only.",
-								},
-							},
-						},
-					},
+					Attributes: licenseSchemaFieldAttributes(),
 				},
 			},
 		},
@@ -205,6 +226,63 @@ func (r *licenseSchemaResource) Configure(
 
 	r.client = data.client
 	r.defaultProductID = data.productID
+}
+
+// ValidateConfig refuses a LIMIT field without usage_shape, and a usage_shape
+// on any other type. Anchor enforces the same pairing; catching it at plan
+// time keeps the apply from failing against a 400.
+func (r *licenseSchemaResource) ValidateConfig(
+	ctx context.Context,
+	req resource.ValidateConfigRequest,
+	resp *resource.ValidateConfigResponse,
+) {
+	var config licenseSchemaResourceModel
+
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if config.Fields.IsNull() || config.Fields.IsUnknown() {
+		return
+	}
+
+	models := make([]licenseFieldModel, 0, len(config.Fields.Elements()))
+	resp.Diagnostics.Append(config.Fields.ElementsAs(ctx, &models, false)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	for _, model := range models {
+		if model.Type.IsUnknown() || model.UsageShape.IsUnknown() {
+			continue
+		}
+
+		isLimit := model.Type.ValueString() == string(nanoclient.LicenseFieldTypeLIMIT)
+		hasShape := !model.UsageShape.IsNull() && model.UsageShape.ValueString() != ""
+		name := model.Name.ValueString()
+
+		switch {
+		case isLimit && !hasShape:
+			resp.Diagnostics.AddError(
+				"Usage Shape Required",
+				fmt.Sprintf(
+					"Field %q is a LIMIT and must set usage_shape to GAUGE or WINDOWED_COUNTER. "+
+						"Anchor refuses a limit whose usage shape is undeclared.",
+					name,
+				),
+			)
+		case !isLimit && hasShape:
+			resp.Diagnostics.AddError(
+				"Usage Shape Not Allowed",
+				fmt.Sprintf(
+					"Field %q has type %s, which cannot set usage_shape. Only LIMIT fields declare one.",
+					name,
+					model.Type.ValueString(),
+				),
+			)
+		}
+	}
 }
 
 func (r *licenseSchemaResource) Create(
@@ -423,6 +501,7 @@ func licenseFieldDeclarationsFromPlan(
 			Name:        model.Name.ValueString(),
 			Type:        nanoclient.LicenseFieldType(model.Type.ValueString()),
 			Description: model.Description.ValueStringPointer(),
+			UsageShape:  usageShapeFromPlan(model.UsageShape),
 			Rules:       rules,
 		})
 	}
@@ -481,6 +560,7 @@ func licenseSchemaStateFromAPI(
 			Name:        types.StringValue(field.Name),
 			Type:        types.StringValue(string(field.Type)),
 			Description: types.StringPointerValue(field.Description),
+			UsageShape:  usageShapeToState(field.UsageShape),
 			Rules:       rules,
 		})
 	}
@@ -527,6 +607,21 @@ func licenseFieldRulesToState(
 	diags.Append(objectDiags...)
 
 	return object, diags
+}
+
+func usageShapeFromPlan(value types.String) *nanoclient.UsageShape {
+	if value.IsNull() || value.IsUnknown() || value.ValueString() == "" {
+		return nil
+	}
+	shape := nanoclient.UsageShape(value.ValueString())
+	return &shape
+}
+
+func usageShapeToState(value *nanoclient.UsageShape) types.String {
+	if value == nil {
+		return types.StringNull()
+	}
+	return types.StringValue(string(*value))
 }
 
 func int64PtrToIntPtr(value *int64) *int {

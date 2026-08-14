@@ -328,8 +328,9 @@ resource "anchor_license_schema" "test" {
 
   fields = [
     {
-      name = "max_flows"
-      type = "LIMIT"
+      name        = "max_flows"
+      type        = "LIMIT"
+      usage_shape = "GAUGE"
       rules = {
         min = 0
         max = 100000
@@ -356,8 +357,9 @@ resource "anchor_license_schema" "test" {
 
   fields = [
     {
-      name = "max_flows"
-      type = "LIMIT"
+      name        = "max_flows"
+      type        = "LIMIT"
+      usage_shape = "GAUGE"
       rules = {
         min = 0
         max = 100000
@@ -400,8 +402,9 @@ resource "anchor_license_schema" "test" {
 
   fields = [
     {
-      name = "max_flows"
-      type = "LIMIT"
+      name        = "max_flows"
+      type        = "LIMIT"
+      usage_shape = "GAUGE"
       rules = {
         min = 0
         max = 100000
