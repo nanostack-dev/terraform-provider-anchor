@@ -24,6 +24,7 @@ resource "anchor_license_schema" "echopoint" {
     {
       name        = "max_flows"
       type        = "LIMIT"
+      usage_shape = "GAUGE"
       description = "Flows an organization can hold."
       rules = {
         min = 0
@@ -69,11 +70,22 @@ is removed from the schema on the next apply.
 
 | type | meaning |
 | --- | --- |
-| `LIMIT` | A ceiling that usage is reported against. Only this type carries usage and a status. |
+| `LIMIT` | A ceiling that usage is reported against. Only this type carries usage and a status. A `LIMIT` field must also set `usage_shape`. |
 | `NUMBER` | A plain number that is not a ceiling. |
 | `BOOLEAN` | A feature toggle. |
 | `ENUM` | One value out of a declared list. |
 | `STRING` | Free text. |
+
+## Usage shape
+
+`usage_shape` is required on a `LIMIT` field and refused on every other type. It pins
+what every usage report against that field means, so a series is one shape for its
+whole life (see Anchor ADR-0013).
+
+| shape | meaning |
+| --- | --- |
+| `GAUGE` | A point-in-time reading. A report must not carry a window. |
+| `WINDOWED_COUNTER` | A count over an explicit `[from, to)` window. A report must carry that window. |
 
 ## Rules
 
@@ -124,6 +136,7 @@ terraform import anchor_license_schema.echopoint prd_2ikcVW44U7UtqJHCOTqHuwkgrBb
 #### Optional
 
 - `description` (String) Optional field description.
+- `usage_shape` (String) Required when `type` is `LIMIT`, refused otherwise. One of `GAUGE`, `WINDOWED_COUNTER`.
 - `rules` (Attributes) Validation rules applied when a license value is set. See [below](#nestedatt--fields--rules).
 
 <a id="nestedatt--fields--rules"></a>

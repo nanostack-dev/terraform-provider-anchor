@@ -137,8 +137,8 @@ github.com/mitchellh/mapstructure v1.5.0 h1:jeMsZIYE/09sWLaz43PL7Gy6RuMjD2eJVyua
 github.com/mitchellh/mapstructure v1.5.0/go.mod h1:bFUtVrKA4DC2yAKiSyO/QUcy7e+RRV2QTWOzhPopBRo=
 github.com/mitchellh/reflectwalk v1.0.2 h1:G2LzWKi524PWgd3mLHV8Y5k7s6XUvT0Gef6zxSIeXaQ=
 github.com/mitchellh/reflectwalk v1.0.2/go.mod h1:mSTlrgnPZtwu0c4WaC2kGObEpuNDbx0jmZXqmk4esnw=
-github.com/nanostack-dev/anchor/clients/go v0.10.1 h1:wtXguRJ0MzsCYbZ7ofP/TBZaOfsu8C64CGVspL1dYOo=
-github.com/nanostack-dev/anchor/clients/go v0.10.1/go.mod h1:6yKkiYTz0Dq3QvaKQm28+8wTnk3RRqWIpJmprW35QOQ=
+github.com/nanostack-dev/anchor/clients/go v0.13.0 h1:lu+8yI8nMHzXpb9+bV5jv/LwDTdotv8kXTv4pojiWnc=
+github.com/nanostack-dev/anchor/clients/go v0.13.0/go.mod h1:6yKkiYTz0Dq3QvaKQm28+8wTnk3RRqWIpJmprW35QOQ=
 github.com/oapi-codegen/nullable v1.1.0 h1:eAh8JVc5430VtYVnq00Hrbpag9PFRGWLjxR1/3KntMs=
 github.com/oapi-codegen/nullable v1.1.0/go.mod h1:KUZ3vUzkmEKY90ksAmit2+5juDIhIZhfDl+0PwOQlFY=
 github.com/oapi-codegen/runtime v1.6.0 h1:7Xx+GlueD6nRuyKoCPzL434Jfi3BetbiJOrzCHp/VPU=

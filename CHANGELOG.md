@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.0 (unreleased)
+
+### Features
+
+- `anchor_license_schema` fields gain `usage_shape` — required when `type` is `LIMIT`,
+  refused for every other type. `GAUGE` is a point-in-time reading.
+  `WINDOWED_COUNTER` is a count over an explicit window. Anchor refuses a limit
+  whose shape is undeclared (ADR-0013), so a schema written without this attribute
+  fails against current Anchor. The provider now catches the pairing at plan time.
+
+### Notes
+
+- The Anchor Go client moves to `v0.13.0`, which carries `usage_shape` on
+  `LicenseFieldDeclaration`.
+
 ## 0.2.0 (2026-08-10)
 
 ### Features

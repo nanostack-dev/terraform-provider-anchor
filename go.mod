@@ -7,7 +7,7 @@ require (
 	github.com/hashicorp/terraform-plugin-framework-jsontypes v0.2.0
 	github.com/hashicorp/terraform-plugin-go v0.31.0
 	github.com/hashicorp/terraform-plugin-testing v1.16.0
-	github.com/nanostack-dev/anchor/clients/go v0.10.1
+	github.com/nanostack-dev/anchor/clients/go v0.13.0
 )
 
 require (
