@@ -17,3 +17,6 @@ crash.*.log
 .DS_Store
 .idea/
 *.iml
+
+# Agent worktrees, created by git worktree add
+worktrees/
