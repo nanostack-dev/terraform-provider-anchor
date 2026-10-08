@@ -1,5 +1,7 @@
 # Terraform Provider: Anchor
 
+Contributor and agent guidance: [documentation index](docs/README.md) and [AGENTS.md](AGENTS.md). This repository works as a standalone checkout.
+
 Terraform provider for [Anchor](https://anchorapi.nanostack.dev) — manage products,
 product roles, product resource permissions, license schemas, and license templates as
 code.
