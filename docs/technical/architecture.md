@@ -1,5 +1,10 @@
 # Implemented architecture
 
+Product and permission resources each own one API-to-state conversion used by
+create, read and update. Product reads retain the existing state ID; create and
+update use the response ID. Permission IDs are reconstructed from the response's
+product and permission name. Nil optional response fields become Terraform null.
+
 All five resources share the provider-data decoder. Absent data leaves resource
 configuration untouched; a different type produces the same configuration
 diagnostic. Each resource then selects its client and, where applicable, its

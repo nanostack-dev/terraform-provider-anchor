@@ -95,11 +95,7 @@ func (r *productResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
-	state := productResourceModel{
-		ID:          types.StringValue(createResp.JSON201.Id),
-		Name:        types.StringValue(createResp.JSON201.Name),
-		Description: types.StringPointerValue(createResp.JSON201.Description),
-	}
+	state := productStateFromAPI(createResp.JSON201, types.StringValue(createResp.JSON201.Id))
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -131,8 +127,7 @@ func (r *productResource) Read(ctx context.Context, req resource.ReadRequest, re
 		return
 	}
 
-	state.Name = types.StringValue(getResp.JSON200.Name)
-	state.Description = types.StringPointerValue(getResp.JSON200.Description)
+	state = productStateFromAPI(getResp.JSON200, state.ID)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -166,11 +161,7 @@ func (r *productResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
-	state := productResourceModel{
-		ID:          types.StringValue(updateResp.JSON200.Id),
-		Name:        types.StringValue(updateResp.JSON200.Name),
-		Description: types.StringPointerValue(updateResp.JSON200.Description),
-	}
+	state := productStateFromAPI(updateResp.JSON200, types.StringValue(updateResp.JSON200.Id))
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -204,4 +195,12 @@ func (r *productResource) ImportState(
 	resp *resource.ImportStateResponse,
 ) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+func productStateFromAPI(product *nanoclient.ProductResponse, id types.String) productResourceModel {
+	return productResourceModel{
+		ID:          id,
+		Name:        types.StringValue(product.Name),
+		Description: types.StringPointerValue(product.Description),
+	}
 }
