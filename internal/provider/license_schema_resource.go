@@ -211,16 +211,9 @@ func (r *licenseSchemaResource) Configure(
 	req resource.ConfigureRequest,
 	resp *resource.ConfigureResponse,
 ) {
-	if req.ProviderData == nil {
-		return
-	}
-
-	data, ok := req.ProviderData.(*providerData)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Provider Data Type",
-			fmt.Sprintf("Expected *providerData, got: %T", req.ProviderData),
-		)
+	data, diags := configuredProviderData(req.ProviderData)
+	resp.Diagnostics.Append(diags...)
+	if diags.HasError() || data == nil {
 		return
 	}
 
