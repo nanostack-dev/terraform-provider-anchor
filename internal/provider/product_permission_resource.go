@@ -141,15 +141,7 @@ func (r *productPermissionResource) Create(
 		return
 	}
 
-	state := productPermissionResourceModel{
-		ID: types.StringValue(
-			buildProductPermissionID(createResp.JSON201.ProductId, createResp.JSON201.Name),
-		),
-		ProductID:     types.StringValue(createResp.JSON201.ProductId),
-		Name:          types.StringValue(createResp.JSON201.Name),
-		Description:   types.StringPointerValue(createResp.JSON201.Description),
-		ScopeModifier: types.StringPointerValue(createResp.JSON201.ScopeModifier),
-	}
+	state := productPermissionStateFromAPI(createResp.JSON201)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -185,11 +177,7 @@ func (r *productPermissionResource) Read(ctx context.Context, req resource.ReadR
 		return
 	}
 
-	state.ID = types.StringValue(buildProductPermissionID(getResp.JSON200.ProductId, getResp.JSON200.Name))
-	state.ProductID = types.StringValue(getResp.JSON200.ProductId)
-	state.Name = types.StringValue(getResp.JSON200.Name)
-	state.Description = types.StringPointerValue(getResp.JSON200.Description)
-	state.ScopeModifier = types.StringPointerValue(getResp.JSON200.ScopeModifier)
+	state = productPermissionStateFromAPI(getResp.JSON200)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -233,15 +221,7 @@ func (r *productPermissionResource) Update(
 		return
 	}
 
-	state := productPermissionResourceModel{
-		ID: types.StringValue(
-			buildProductPermissionID(updateResp.JSON200.ProductId, updateResp.JSON200.Name),
-		),
-		ProductID:     types.StringValue(updateResp.JSON200.ProductId),
-		Name:          types.StringValue(updateResp.JSON200.Name),
-		Description:   types.StringPointerValue(updateResp.JSON200.Description),
-		ScopeModifier: types.StringPointerValue(updateResp.JSON200.ScopeModifier),
-	}
+	state := productPermissionStateFromAPI(updateResp.JSON200)
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -315,4 +295,14 @@ func (r *productPermissionResource) ImportState(
 
 func buildProductPermissionID(productID, permissionName string) string {
 	return productID + ":" + permissionName
+}
+
+func productPermissionStateFromAPI(permission *nanoclient.ProductResourcePermissionResponse) productPermissionResourceModel {
+	return productPermissionResourceModel{
+		ID:            types.StringValue(buildProductPermissionID(permission.ProductId, permission.Name)),
+		ProductID:     types.StringValue(permission.ProductId),
+		Name:          types.StringValue(permission.Name),
+		Description:   types.StringPointerValue(permission.Description),
+		ScopeModifier: types.StringPointerValue(permission.ScopeModifier),
+	}
 }
