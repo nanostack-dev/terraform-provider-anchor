@@ -179,19 +179,12 @@ func (r *licenseTemplateResource) Create(
 	// A template is always born ACTIVE — the create call has no status field —
 	// so a plan that wants archived = true on day one needs a second call.
 	if !plan.Archived.IsUnknown() && plan.Archived.ValueBool() {
-		archiveResp, archiveErr := r.client.ArchiveLicenseTemplateWithResponse(ctx, productID, result.Id)
-		if archiveErr != nil {
-			resp.Diagnostics.AddError("Unable to Archive License Template", archiveErr.Error())
+		archived, diags := r.archive(ctx, productID, result.Id)
+		resp.Diagnostics.Append(diags...)
+		if diags.HasError() {
 			return
 		}
-		if archiveResp.JSON200 == nil {
-			resp.Diagnostics.AddError(
-				"Unable to Archive License Template",
-				formatAPIError("archive license template", archiveResp.StatusCode(), archiveResp.Body),
-			)
-			return
-		}
-		result = archiveResp.JSON200
+		result = archived
 	}
 
 	// The written values are kept verbatim from the plan. Anchor validates the template
@@ -311,21 +304,12 @@ func (r *licenseTemplateResource) Update(
 	// field edit above (still legal — the template was ACTIVE a moment ago) has
 	// landed.
 	if !state.Archived.ValueBool() && plan.Archived.ValueBool() {
-		archiveResp, archiveErr := r.client.ArchiveLicenseTemplateWithResponse(
-			ctx, productID, plan.ID.ValueString(),
-		)
-		if archiveErr != nil {
-			resp.Diagnostics.AddError("Unable to Archive License Template", archiveErr.Error())
+		archived, diags := r.archive(ctx, productID, plan.ID.ValueString())
+		resp.Diagnostics.Append(diags...)
+		if diags.HasError() {
 			return
 		}
-		if archiveResp.JSON200 == nil {
-			resp.Diagnostics.AddError(
-				"Unable to Archive License Template",
-				formatAPIError("archive license template", archiveResp.StatusCode(), archiveResp.Body),
-			)
-			return
-		}
-		result = archiveResp.JSON200
+		result = archived
 	}
 
 	plan.ID = types.StringValue(result.Id)
@@ -335,9 +319,6 @@ func (r *licenseTemplateResource) Update(
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
-// Delete archives the template. Anchor keeps the row for good, because the organizations
-// licensed from it name it as the statement of what they were sold, so there is no delete
-// to call. Archiving is the one withdrawal the API offers and it cannot be undone.
 // Delete removes the template outright. Anchor refuses this with a 400 if any
 // organization license still names the template — there is no cascade and no
 // force, and the fix is not a Terraform concept: either resolve the reference
@@ -437,4 +418,18 @@ func licenseTemplateStateFromAPI(
 		Values:      jsontypes.NewNormalizedValue(string(encoded)),
 		Archived:    types.BoolValue(template.Status == nanoclient.LicenseTemplateStatusARCHIVED),
 	}, diags
+}
+
+func (r *licenseTemplateResource) archive(ctx context.Context, productID, templateID string) (*nanoclient.LicenseTemplateResponse, diag.Diagnostics) {
+	response, err := r.client.ArchiveLicenseTemplateWithResponse(ctx, productID, templateID)
+	var diags diag.Diagnostics
+	if err != nil {
+		diags.AddError("Unable to Archive License Template", err.Error())
+		return nil, diags
+	}
+	if response.JSON200 == nil {
+		diags.AddError("Unable to Archive License Template", formatAPIError("archive license template", response.StatusCode(), response.Body))
+		return nil, diags
+	}
+	return response.JSON200, nil
 }

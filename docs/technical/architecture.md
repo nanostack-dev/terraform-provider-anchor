@@ -1,5 +1,9 @@
 # Implemented architecture
 
+License-template create and update retain their own archive decisions. They
+share the archive request and response validation after the initial write
+succeeds; neither path replaces plan values with the archive response's values.
+
 Product and permission resources each own one API-to-state conversion used by
 create, read and update. Product reads retain the existing state ID; create and
 update use the response ID. Permission IDs are reconstructed from the response's
