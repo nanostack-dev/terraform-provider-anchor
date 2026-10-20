@@ -1,6 +1,6 @@
 # Local setup
 
-Use the Go version in [go.mod](../../go.mod), currently 1.26.5. Terraform is needed to exercise provider configuration; ordinary Go unit tests do not require API credentials or a workspace checkout.
+Use the Go version in [go.mod](../../go.mod), currently 1.26.10. Terraform is needed to exercise provider configuration; ordinary Go unit tests do not require API credentials or a workspace checkout.
 
 ```sh
 go mod download
