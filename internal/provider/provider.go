@@ -154,17 +154,20 @@ func (p *anchorProvider) Resources(_ context.Context) []func() resource.Resource
 		NewProductResource,
 		NewProductRoleResource,
 		NewProductPermissionResource,
+		NewProductResourceTypeResource,
 		NewLicenseSchemaResource,
 		NewLicenseTemplateResource,
 	}
 }
 
-// DataSources returns no data sources.
+// DataSources returns the provider's data sources.
 //
 // The provider offers nothing that manages an organization's license, neither a resource
 // nor a data source. An organization's license is runtime data: it carries per-customer
 // adjustments that Terraform would revert on the next apply. See ADR-0006 in the anchor
 // repository.
 func (p *anchorProvider) DataSources(_ context.Context) []func() datasource.DataSource {
-	return nil
+	return []func() datasource.DataSource{
+		NewProductResourceTypeDataSource,
+	}
 }

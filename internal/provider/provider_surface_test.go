@@ -50,6 +50,37 @@ func TestProviderRegistersLicensingResources(t *testing.T) {
 	}
 }
 
+func TestProviderRegistersResourceTypeSurface(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	anchor := anchorprovider.New("test")()
+
+	if names := resourceTypeNames(ctx, t, anchor); !slices.Contains(names, "anchor_product_resource_type") {
+		t.Errorf("resource anchor_product_resource_type is not registered, got: %v", names)
+	}
+	if names := dataSourceTypeNames(ctx, t, anchor); !slices.Contains(names, "anchor_product_resource_type") {
+		t.Errorf("data source anchor_product_resource_type is not registered, got: %v", names)
+	}
+}
+
+func TestPermissionsAndRolesRequireAResourceType(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	for _, newResource := range []func() resource.Resource{
+		anchorprovider.NewProductPermissionResource,
+		anchorprovider.NewProductRoleResource,
+	} {
+		schemaResp := &resource.SchemaResponse{}
+		newResource().Schema(ctx, resource.SchemaRequest{}, schemaResp)
+		attribute, found := schemaResp.Schema.Attributes["resource_type"]
+		if !found || !attribute.IsRequired() {
+			t.Errorf("resource_type must be a required attribute, got: %+v", attribute)
+		}
+	}
+}
+
 func resourceTypeNames(ctx context.Context, t *testing.T, anchor provider.Provider) []string {
 	t.Helper()
 

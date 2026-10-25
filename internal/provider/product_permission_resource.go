@@ -37,6 +37,7 @@ type productPermissionResourceModel struct {
 	Name          types.String `tfsdk:"name"`
 	Description   types.String `tfsdk:"description"`
 	ScopeModifier types.String `tfsdk:"scope_modifier"`
+	ResourceType  types.String `tfsdk:"resource_type"`
 }
 
 func (r *productPermissionResource) Metadata(
@@ -75,9 +76,20 @@ func (r *productPermissionResource) Schema(_ context.Context, _ resource.SchemaR
 				Optional:    true,
 				Description: "Optional permission description.",
 			},
+			"resource_type": schema.StringAttribute{
+				Required: true,
+				Description: "Slug of the resource type this permission is scoped to, for example organization. " +
+					"Anchor never picks one. It never changes, so a new value replaces the permission.",
+				PlanModifiers: []planmodifier.String{
+					requiresReplaceOnceSet(),
+				},
+			},
+
 			"scope_modifier": schema.StringAttribute{
 				Optional:    true,
 				Description: "Optional scope modifier (for example own or team).",
+				DeprecationMessage: "Anchor no longer evaluates scope_modifier and will remove it. Scope a " +
+					"permission with resource_type instead.",
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.RequiresReplace(),
 				},
@@ -126,6 +138,7 @@ func (r *productPermissionResource) Create(
 			Name:          plan.Name.ValueString(),
 			Description:   stringPtrFromTFValue(plan.Description.ValueString()),
 			ScopeModifier: stringPtrFromTFValue(plan.ScopeModifier.ValueString()),
+			ResourceType:  plan.ResourceType.ValueString(),
 		},
 	)
 	if err != nil {
@@ -304,5 +317,6 @@ func productPermissionStateFromAPI(permission *nanoclient.ProductResourcePermiss
 		Name:          types.StringValue(permission.Name),
 		Description:   types.StringPointerValue(permission.Description),
 		ScopeModifier: types.StringPointerValue(permission.ScopeModifier),
+		ResourceType:  types.StringValue(permission.ResourceType),
 	}
 }

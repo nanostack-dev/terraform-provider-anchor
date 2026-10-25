@@ -3,8 +3,12 @@ package provider
 import (
 	"context"
 	"fmt"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"net/http"
 	"strings"
+
+	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	nanoclient "github.com/nanostack-dev/anchor/clients/go"
 )
@@ -54,4 +58,40 @@ func stringPtrFromTFValue(value string) *string {
 		return nil
 	}
 	return &v
+}
+
+// clearableStringPtr is the value an update sends for an optional string. An
+// attribute removed from configuration sends an empty string, since Anchor keeps
+// the stored value of an omitted field.
+func clearableStringPtr(planned, prior types.String) *string {
+	if value := stringPtrFromTFValue(planned.ValueString()); value != nil {
+		return value
+	}
+	if prior.IsNull() || prior.ValueString() == "" {
+		return nil
+	}
+	empty := ""
+	return &empty
+}
+
+// requiresReplaceOnceSet replaces the resource when the value changes, except from
+// null: state written before the attribute existed holds null, and Anchor already
+// stores the scope it now reports.
+func requiresReplaceOnceSet() planmodifier.String {
+	return stringplanmodifier.RequiresReplaceIf(
+		func(_ context.Context, req planmodifier.StringRequest, resp *stringplanmodifier.RequiresReplaceIfFuncResponse) {
+			resp.RequiresReplace = !req.StateValue.IsNull()
+		},
+		"A change replaces the resource, unless the prior state predates the attribute.",
+		"A change replaces the resource, unless the prior state predates the attribute.",
+	)
+}
+
+// stringValueFromAPI keeps an empty optional string null in state, since Anchor returns
+// an empty description for one that was never set.
+func stringValueFromAPI(value *string) types.String {
+	if value == nil || *value == "" {
+		return types.StringNull()
+	}
+	return types.StringValue(*value)
 }
