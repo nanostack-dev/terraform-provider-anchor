@@ -33,11 +33,12 @@ type productRoleResource struct {
 }
 
 type productRoleResourceModel struct {
-	ID          types.String `tfsdk:"id"`
-	ProductID   types.String `tfsdk:"product_id"`
-	Name        types.String `tfsdk:"name"`
-	Description types.String `tfsdk:"description"`
-	Permissions types.Set    `tfsdk:"permissions"`
+	ID           types.String `tfsdk:"id"`
+	ProductID    types.String `tfsdk:"product_id"`
+	Name         types.String `tfsdk:"name"`
+	Description  types.String `tfsdk:"description"`
+	Permissions  types.Set    `tfsdk:"permissions"`
+	ResourceType types.String `tfsdk:"resource_type"`
 }
 
 func (r *productRoleResource) Metadata(
@@ -77,9 +78,18 @@ func (r *productRoleResource) Schema(_ context.Context, _ resource.SchemaRequest
 				Description: "Optional role description.",
 			},
 			"permissions": schema.SetAttribute{
-				Optional:    true,
-				Description: "Resource permission names assigned to this role.",
+				Optional: true,
+				Description: "Resource permission names assigned to this role. Each must be scoped to the " +
+					"role's resource type or to a type below it.",
 				ElementType: types.StringType,
+			},
+			"resource_type": schema.StringAttribute{
+				Required: true,
+				Description: "Slug of the resource type this role is scoped to, for example organization. " +
+					"Anchor never picks one. It never changes, so a new value replaces the role.",
+				PlanModifiers: []planmodifier.String{
+					requiresReplaceOnceSet(),
+				},
 			},
 		},
 	}
@@ -124,9 +134,10 @@ func (r *productRoleResource) Create(ctx context.Context, req resource.CreateReq
 		ctx,
 		productID,
 		nanoclient.CreateProductRoleJSONRequestBody{
-			Name:        plan.Name.ValueString(),
-			Description: stringPtrFromTFValue(plan.Description.ValueString()),
-			Permissions: permissions,
+			Name:         plan.Name.ValueString(),
+			Description:  stringPtrFromTFValue(plan.Description.ValueString()),
+			Permissions:  permissions,
+			ResourceType: plan.ResourceType.ValueString(),
 		},
 	)
 	if err != nil {
@@ -226,7 +237,7 @@ func (r *productRoleResource) Update(ctx context.Context, req resource.UpdateReq
 		plan.ID.ValueString(),
 		nanoclient.UpdateProductRoleJSONRequestBody{
 			Name:        name,
-			Description: stringPtrFromTFValue(plan.Description.ValueString()),
+			Description: clearableStringPtr(plan.Description, state.Description),
 			Permissions: nil,
 		},
 	)
@@ -381,10 +392,11 @@ func productRoleStateFromAPI(
 	diags.Append(setDiags...)
 
 	return productRoleResourceModel{
-		ID:          types.StringValue(role.Id),
-		ProductID:   types.StringValue(role.ProductId),
-		Name:        types.StringValue(role.Name),
-		Description: types.StringPointerValue(role.Description),
-		Permissions: permissionsSet,
+		ID:           types.StringValue(role.Id),
+		ProductID:    types.StringValue(role.ProductId),
+		Name:         types.StringValue(role.Name),
+		Description:  stringValueFromAPI(role.Description),
+		Permissions:  permissionsSet,
+		ResourceType: types.StringValue(role.ResourceType),
 	}, diags
 }

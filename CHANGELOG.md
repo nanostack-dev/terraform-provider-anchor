@@ -1,5 +1,48 @@
 # Changelog
 
+## Unreleased
+
+### Breaking changes
+
+- `anchor_product_permission` and `anchor_product_role` require `resource_type`, the slug
+  of the resource type they are scoped to. Anchor no longer creates either without one
+  and never picks a scope. Add `resource_type = data.anchor_product_resource_type.organization.slug`
+  to an existing configuration to keep its current scope; Anchor scoped every existing
+  permission and role to `organization`, so the next plan shows no change. State written
+  by the previous version holds no `resource_type`, and filling it in never replaces the
+  resource, even with `-refresh=false`. A different
+  value replaces the resource, since a scope never changes. Anchor removes a replaced
+  permission from every role, and refuses to replace a role a member holds.
+- Needs an Anchor release with resource types. Upgrade Anchor first: against an older
+  Anchor, creating a permission or a role fails. Against a newer Anchor, the previous
+  provider can no longer create permissions or roles, so upgrade the provider before
+  the next apply that creates one.
+- After one apply with this version, the previous provider can't read the state, which
+  now holds `resource_type`.
+
+### Features
+
+- `anchor_product_resource_type` — manage a product's resource types: the tree of kinds
+  of things the product protects, under the built-in `organization` type. Parent types
+  are referenced by slug, so Terraform orders creates and destroys through the tree.
+- `anchor_product_resource_type` data source — read one type by slug, such as the
+  built-in `organization` type that no resource manages.
+
+### Fixes
+
+- `anchor_product_role` keeps an unset `description` null, so a role created without one
+  no longer fails the apply with an inconsistent result, and removing a description
+  clears it in Anchor.
+
+### Deprecations
+
+- `anchor_product_permission.scope_modifier`: Anchor no longer evaluates it and will
+  remove it. Use `resource_type`.
+
+### Notes
+
+- The Anchor Go client moves to a version that has resource types.
+
 ## 0.3.0 (2026-08-14)
 
 ### Features

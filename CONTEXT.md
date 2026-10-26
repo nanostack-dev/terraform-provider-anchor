@@ -4,7 +4,8 @@
 | --- | --- |
 | Product | Anchor application boundary identified by a public KSUID. |
 | Product role | Named role owned by a product. |
-| Product permission | Product resource/permission definition managed by the API. |
+| Product permission | Product resource/permission definition managed by the API, scoped to one resource type. |
+| Resource type | A kind of thing a product protects, such as a project or a folder, placed under parent types in the product's tree. Every product has the built-in `organization` type, read through the data source. |
 | License schema | Product licensing structure managed as configuration. |
 | License template | Reusable license configuration; may be archived while preserving references/history. |
 | Organization license | Runtime copy of a template with customer-specific adjustments; Terraform does not manage or expose it. |

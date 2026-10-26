@@ -14,6 +14,7 @@ Published to the public Terraform Registry as
 - `anchor_product`
 - `anchor_product_role`
 - `anchor_product_permission`
+- `anchor_product_resource_type` (and its data source)
 - `anchor_license_schema`
 - `anchor_license_template`
 
