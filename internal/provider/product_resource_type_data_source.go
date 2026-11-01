@@ -26,14 +26,15 @@ type productResourceTypeDataSource struct {
 }
 
 type productResourceTypeDataSourceModel struct {
-	ID            types.String `tfsdk:"id"`
-	ProductID     types.String `tfsdk:"product_id"`
-	Slug          types.String `tfsdk:"slug"`
-	Name          types.String `tfsdk:"name"`
-	Description   types.String `tfsdk:"description"`
-	ParentTypes   types.Set    `tfsdk:"parent_types"`
-	NestsInItself types.Bool   `tfsdk:"nests_in_itself"`
-	BuiltIn       types.Bool   `tfsdk:"built_in"`
+	ID                types.String `tfsdk:"id"`
+	ProductID         types.String `tfsdk:"product_id"`
+	Slug              types.String `tfsdk:"slug"`
+	Name              types.String `tfsdk:"name"`
+	Description       types.String `tfsdk:"description"`
+	ParentTypes       types.Set    `tfsdk:"parent_types"`
+	NestsInItself     types.Bool   `tfsdk:"nests_in_itself"`
+	AllowsCustomRoles types.Bool   `tfsdk:"allows_custom_roles"`
+	BuiltIn           types.Bool   `tfsdk:"built_in"`
 }
 
 func (d *productResourceTypeDataSource) Metadata(
@@ -82,6 +83,10 @@ func (d *productResourceTypeDataSource) Schema(
 			"nests_in_itself": schema.BoolAttribute{
 				Computed:    true,
 				Description: "Whether an instance may sit under another instance of the same type.",
+			},
+			"allows_custom_roles": schema.BoolAttribute{
+				Computed:    true,
+				Description: "Whether the product's organizations may create their own roles scoped to this type.",
 			},
 			"built_in": schema.BoolAttribute{
 				Computed:    true,
@@ -158,14 +163,15 @@ func (d *productResourceTypeDataSource) Read(
 	resp.Diagnostics.Append(setDiags...)
 
 	state := productResourceTypeDataSourceModel{
-		ID:            types.StringValue(found.Id),
-		ProductID:     types.StringValue(found.ProductId),
-		Slug:          types.StringValue(found.Slug),
-		Name:          types.StringValue(found.Name),
-		Description:   stringValueFromAPI(found.Description),
-		ParentTypes:   parentTypes,
-		NestsInItself: types.BoolValue(found.NestsInItself),
-		BuiltIn:       types.BoolValue(found.BuiltIn),
+		ID:                types.StringValue(found.Id),
+		ProductID:         types.StringValue(found.ProductId),
+		Slug:              types.StringValue(found.Slug),
+		Name:              types.StringValue(found.Name),
+		Description:       stringValueFromAPI(found.Description),
+		ParentTypes:       parentTypes,
+		NestsInItself:     types.BoolValue(found.NestsInItself),
+		AllowsCustomRoles: types.BoolValue(found.AllowsCustomRoles),
+		BuiltIn:           types.BoolValue(found.BuiltIn),
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }

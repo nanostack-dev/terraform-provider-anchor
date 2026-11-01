@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Features
+
+- `anchor_product_resource_type` takes `allows_custom_roles` (default `false`): the
+  product's organizations may then create their own roles scoped to that type. The
+  `anchor_product_resource_type` data source reads it. Anchor creates a type closed, so
+  the provider opens it with an update right after the create. Turning it off keeps the
+  custom roles that exist and the access they grant.
+- Pins the Anchor Go client v0.44.0.
+
+## 0.4.0 (2026-10-25)
+
 ### Breaking changes
 
 - `anchor_product_permission` and `anchor_product_role` require `resource_type`, the slug

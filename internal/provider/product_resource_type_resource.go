@@ -41,6 +41,9 @@ type productResourceTypeResourceModel struct {
 	Description   types.String `tfsdk:"description"`
 	ParentTypes   types.Set    `tfsdk:"parent_types"`
 	NestsInItself types.Bool   `tfsdk:"nests_in_itself"`
+	// AllowsCustomRoles lets the product's organizations create their own roles
+	// scoped to this type.
+	AllowsCustomRoles types.Bool `tfsdk:"allows_custom_roles"`
 }
 
 func (r *productResourceTypeResource) Metadata(
@@ -99,6 +102,14 @@ func (r *productResourceTypeResource) Schema(_ context.Context, _ resource.Schem
 				Computed:    true,
 				Default:     booldefault.StaticBool(false),
 				Description: "Whether an instance may sit under another instance of the same type.",
+			},
+			"allows_custom_roles": schema.BoolAttribute{
+				Optional: true,
+				Computed: true,
+				Default:  booldefault.StaticBool(false),
+				Description: "Whether the product's organizations may create their own roles scoped to this type. " +
+					"Turning it off keeps the custom roles that exist and the access they grant: organizations " +
+					"can no longer create or change them, but can still delete them.",
 			},
 		},
 	}
@@ -164,7 +175,30 @@ func (r *productResourceTypeResource) Create(
 		return
 	}
 
-	state, diags := productResourceTypeStateFromAPI(ctx, createResp.JSON201)
+	created := createResp.JSON201
+	// Anchor's create takes no allows_custom_roles: a type starts closed, and
+	// opening it is an update.
+	if plan.AllowsCustomRoles.ValueBool() {
+		allowsCustomRoles := true
+		updateResp, updateErr := r.client.UpdateProductResourceTypeWithResponse(
+			ctx, productID, created.Id,
+			nanoclient.UpdateProductResourceTypeJSONRequestBody{AllowsCustomRoles: &allowsCustomRoles},
+		)
+		if updateErr != nil {
+			resp.Diagnostics.AddError("Unable to Allow Custom Roles on Product Resource Type", updateErr.Error())
+			return
+		}
+		if updateResp.JSON200 == nil {
+			resp.Diagnostics.AddError(
+				"Unable to Allow Custom Roles on Product Resource Type",
+				formatAPIError("update product resource type", updateResp.StatusCode(), updateResp.Body),
+			)
+			return
+		}
+		created = updateResp.JSON200
+	}
+
+	state, diags := productResourceTypeStateFromAPI(ctx, created)
 	resp.Diagnostics.Append(diags...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -235,15 +269,17 @@ func (r *productResourceTypeResource) Update(
 
 	name := plan.Name.ValueString()
 	nestsInItself := plan.NestsInItself.ValueBool()
+	allowsCustomRoles := plan.AllowsCustomRoles.ValueBool()
 	updateResp, err := r.client.UpdateProductResourceTypeWithResponse(
 		ctx,
 		prior.ProductID.ValueString(),
 		prior.ID.ValueString(),
 		nanoclient.UpdateProductResourceTypeJSONRequestBody{
-			Name:          &name,
-			Description:   clearableStringPtr(plan.Description, prior.Description),
-			ParentTypes:   &parentTypes,
-			NestsInItself: &nestsInItself,
+			Name:              &name,
+			Description:       clearableStringPtr(plan.Description, prior.Description),
+			ParentTypes:       &parentTypes,
+			NestsInItself:     &nestsInItself,
+			AllowsCustomRoles: &allowsCustomRoles,
 		},
 	)
 	if err != nil {
@@ -319,12 +355,13 @@ func productResourceTypeStateFromAPI(
 	parentTypes, diags := types.SetValueFrom(ctx, types.StringType, resourceType.ParentTypes)
 
 	return productResourceTypeResourceModel{
-		ID:            types.StringValue(resourceType.Id),
-		ProductID:     types.StringValue(resourceType.ProductId),
-		Slug:          types.StringValue(resourceType.Slug),
-		Name:          types.StringValue(resourceType.Name),
-		Description:   stringValueFromAPI(resourceType.Description),
-		ParentTypes:   parentTypes,
-		NestsInItself: types.BoolValue(resourceType.NestsInItself),
+		ID:                types.StringValue(resourceType.Id),
+		ProductID:         types.StringValue(resourceType.ProductId),
+		Slug:              types.StringValue(resourceType.Slug),
+		Name:              types.StringValue(resourceType.Name),
+		Description:       stringValueFromAPI(resourceType.Description),
+		ParentTypes:       parentTypes,
+		NestsInItself:     types.BoolValue(resourceType.NestsInItself),
+		AllowsCustomRoles: types.BoolValue(resourceType.AllowsCustomRoles),
 	}, diags
 }
