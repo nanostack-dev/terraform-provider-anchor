@@ -16,4 +16,7 @@ resource "anchor_product_resource_type" "folder" {
   name            = "Folder"
   parent_types    = [anchor_product_resource_type.project.slug]
   nests_in_itself = true
+
+  # Organizations may create their own roles scoped to folders.
+  allows_custom_roles = true
 }

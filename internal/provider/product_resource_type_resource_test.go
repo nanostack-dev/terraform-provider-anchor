@@ -28,6 +28,8 @@ func TestAccProductResourceTypes(t *testing.T) {
 					resource.TestCheckTypeSetElemAttr("anchor_product_resource_type.project", "parent_types.*", "organization"),
 					resource.TestCheckTypeSetElemAttr("anchor_product_resource_type.folder", "parent_types.*", "project"),
 					resource.TestCheckResourceAttr("anchor_product_resource_type.folder", "nests_in_itself", "true"),
+					resource.TestCheckResourceAttr("anchor_product_resource_type.folder", "allows_custom_roles", "true"),
+					resource.TestCheckResourceAttr("anchor_product_resource_type.project", "allows_custom_roles", "false"),
 					resource.TestCheckResourceAttr("anchor_product_permission.view", "resource_type", "folder"),
 					resource.TestCheckResourceAttr("anchor_product_role.lead", "resource_type", "project"),
 					resource.TestCheckResourceAttr("anchor_product_resource_type.project", "description", "Work grouped together."),
@@ -90,8 +92,9 @@ resource "anchor_product_resource_type" "folder" {
   product_id      = anchor_product.test.id
   slug            = "folder"
   name            = %[2]q
-  parent_types    = [anchor_product_resource_type.project.slug]
-  nests_in_itself = true
+  parent_types        = [anchor_product_resource_type.project.slug]
+  nests_in_itself     = true
+  allows_custom_roles = true
 }
 
 resource "anchor_product_permission" "view" {

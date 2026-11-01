@@ -35,4 +35,5 @@ data "anchor_product_resource_type" "organization" {
 - `description` (String) Description.
 - `parent_types` (Set of String) Slugs of the types an instance may sit under. Empty for `organization`.
 - `nests_in_itself` (Boolean) Whether an instance may sit under another instance of the same type.
+- `allows_custom_roles` (Boolean) Whether the product's organizations may create their own roles scoped to this type.
 - `built_in` (Boolean) `true` for the `organization` type every product has.

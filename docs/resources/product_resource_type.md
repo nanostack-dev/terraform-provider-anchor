@@ -32,6 +32,9 @@ resource "anchor_product_resource_type" "folder" {
   name            = "Folder"
   parent_types    = [anchor_product_resource_type.project.slug]
   nests_in_itself = true
+
+  # Organizations may create their own roles scoped to folders.
+  allows_custom_roles = true
 }
 ```
 
@@ -48,6 +51,7 @@ resource "anchor_product_resource_type" "folder" {
 - `product_id` (String) Product KSUID. Defaults to the provider `product_id`. Changing this forces a new resource.
 - `description` (String) Optional description.
 - `nests_in_itself` (Boolean) Whether an instance may sit under another instance of the same type. Defaults to `false`.
+- `allows_custom_roles` (Boolean) Whether the product's organizations may create their own roles scoped to this type. Defaults to `false`. Turning it off keeps the custom roles that exist and the access they grant: organizations can no longer create or change them, but can still delete them.
 
 ### Read-Only
 

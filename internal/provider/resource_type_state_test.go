@@ -14,13 +14,16 @@ func TestResourceTypeStateKeepsAnEmptyDescriptionNull(t *testing.T) {
 	empty := ""
 	state, diags := productResourceTypeStateFromAPI(t.Context(), &nanoclient.ProductResourceTypeResponse{
 		Id: "rtype_1", ProductId: "prd_1", Slug: "folder", Name: "Folder", Description: &empty,
-		ParentTypes: []string{"project"}, NestsInItself: true,
+		ParentTypes: []string{"project"}, NestsInItself: true, AllowsCustomRoles: true,
 	})
 	if diags.HasError() {
 		t.Fatal(diags)
 	}
 	if !state.Description.IsNull() || state.Slug.ValueString() != "folder" || !state.NestsInItself.ValueBool() {
 		t.Fatalf("unexpected state: %+v", state)
+	}
+	if !state.AllowsCustomRoles.ValueBool() {
+		t.Fatalf("allows_custom_roles not kept: %+v", state)
 	}
 	if len(state.ParentTypes.Elements()) != 1 {
 		t.Fatalf("parent types not kept: %v", state.ParentTypes)
