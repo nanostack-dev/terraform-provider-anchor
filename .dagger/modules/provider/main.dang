@@ -1,0 +1,29 @@
+pub description = "go build and go vet for the provider; the official go module runs its tests"
+
+type Provider {
+  """
+  Go toolchain image. Keep it equal to the go line in go.mod.
+  """
+  pub goImage: String!
+
+  new(goImage: String! = "golang:1.26.10-bookworm") {
+    self.goImage = goImage
+    self
+  }
+
+  """
+  Every package builds and passes go vet.
+  """
+  buildAndVet(ws: Workspace!): Void @check {
+    container
+      .from(goImage)
+      .withMountedCache("/go/pkg/mod", cacheVolume("go-mod"))
+      .withMountedCache("/root/.cache/go-build", cacheVolume("go-build"))
+      .withDirectory("/src", ws.directory("/", exclude: [".git", ".dagger", "dist"]))
+      .withWorkdir("/src")
+      .withExec(["go", "build", "./..."])
+      .withExec(["go", "vet", "./..."])
+      .sync
+    null
+  }
+}

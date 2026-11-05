@@ -154,3 +154,7 @@ the GPG public key is registered), making `terraform init` work for consumers.
 ## License
 
 [Apache License 2.0](./LICENSE).
+
+## CI
+
+`dagger check` runs what CI runs: `go build` and `go vet` (`.dagger/modules/provider`) and the tests (Dagger's official go module), configured in [dagger.toml](dagger.toml). Install the pinned CLI with `./scripts/ci/install-dagger.sh ~/.local/bin` (Docker must run).

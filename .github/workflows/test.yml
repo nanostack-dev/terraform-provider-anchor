@@ -1,4 +1,7 @@
 # Build, vet and test main pushes and pull requests, including stacked bases.
+# The checks are Dagger checks (dagger.toml): `dagger check` runs them the same
+# way on a laptop. This public repository stays on GitHub-hosted runners, so
+# each run starts a cold engine.
 name: Test
 
 on:
@@ -10,16 +13,21 @@ on:
 permissions:
   contents: read
 
+env:
+  DAGGER_VERSION: v1.0.0-beta.24
+  DAGGER_ENGINE: image://registry.dagger.io/engine:v1.0.0-beta.24
+  DAGGER_NO_NAG: '1'
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version-file: 'go.mod'
-          cache: true
-      - run: go mod download
-      - run: go build -v ./...
-      - run: go vet ./...
-      - run: go test -v ./...
+      - name: Install the Dagger CLI
+        run: ./scripts/ci/install-dagger.sh "$RUNNER_TEMP/dagger-bin"
+      - name: Run every check
+        run: |
+          set -euo pipefail
+          export PATH="$RUNNER_TEMP/dagger-bin:$PATH"
+          dagger check --progress=report
